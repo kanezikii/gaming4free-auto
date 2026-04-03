@@ -62,7 +62,7 @@ async function autoSolveCaptcha(page) {
             ],
             ignoreDefaultArgs: ["--mute-audio"],
         });
-        console.log("✅ [步骤 1] 浏览器进程拉起成功！死锁已解除！");
+        console.log("✅ [步骤 1] 浏览器进程拉起成功！");
 
         console.log("📄 [步骤 2] 正在创建新标签页...");
         const page = await context.newPage();
@@ -74,12 +74,9 @@ async function autoSolveCaptcha(page) {
         console.log("✅ [步骤 3] 页面加载完成。");
 
         console.log("🔑 [步骤 4] 正在输入前台账号密码...");
-        // 前台输入框加上可见性过滤
         await targetPage.locator('input[type="email"]').filter({ state: 'visible' }).first().fill(MC_USERNAME);
         await targetPage.locator('input[type="password"]').filter({ state: 'visible' }).first().fill(MC_PASSWORD);
         
-        // 🌟 本次修复核心：使用更灵活的 regex 进行模糊匹配，并强行点击
-        console.log("⏳ [步骤 4] 尝试定位并点击登录按钮 (使用模糊匹配+强行点击)...");
         const loginBtn = targetPage.getByRole('button', { name: /LOGIN|登录|Sign In/i }).filter({ state: 'visible' }).first();
         await loginBtn.click({ force: true });
         console.log("⏳ [步骤 4] 账号密码已提交！等待跳转 Dashboard...");
@@ -105,14 +102,45 @@ async function autoSolveCaptcha(page) {
         const newPage = await panelPromise;
         if (newPage) {
             targetPage = newPage;
-            // 多等一会儿，确保后台的 React/Vue 页面完全渲染出来
             await targetPage.waitForLoadState('networkidle');
             console.log("✅ [步骤 6] 已成功切换至后台新标签页。");
         }
 
-        console.log("🔒 [步骤 7] 执行后台二次登录 (已开启防陷阱识别)...");
+        // =====================================
+        // 🌟 本次修复核心：中转页广告与导航处理
+        // =====================================
+        console.log("🛡️ [步骤 6.5] 检查是否遭遇 Serverwave 赞助商中转页...");
+        await targetPage.waitForTimeout(3000); // 稍微等广告弹出来
         
-        // 过滤掉所有被隐藏的诱捕诱饵输入框
+        // 暴力按 ESC 尝试关掉可能遮挡视线的弹窗
+        await targetPage.keyboard.press('Escape').catch(() => {});
+        await targetPage.waitForTimeout(500);
+
+        try {
+            // 尝试点击广告右上角的关闭按钮 (X)
+            const closeAdBtn = targetPage.locator('.close, svg.lucide-x, button:has(svg.lucide-x)').first();
+            if (await closeAdBtn.isVisible({ timeout: 1000 })) {
+                await closeAdBtn.click({ force: true });
+                console.log("💥 [步骤 6.5] 已强行关闭中心广告弹窗！");
+            }
+        } catch (e) {}
+
+        try {
+            // 寻找导航栏里的 LOG IN 按钮并点击
+            const topNavLoginBtn = targetPage.locator('a, button').filter({ hasText: /^LOG IN$/i }).first();
+            if (await topNavLoginBtn.isVisible({ timeout: 3000 })) {
+                console.log("🔗 [步骤 6.5] 发现中转页！正在点击右上角 LOG IN 前往真正的面板...");
+                await topNavLoginBtn.click({ force: true });
+                await targetPage.waitForLoadState('networkidle');
+            } else {
+                console.log("✅ [步骤 6.5] 未检测到中转页导航，可能已直达面板。");
+            }
+        } catch (e) {
+            console.log("✅ [步骤 6.5] 未检测到中转页导航，可能已直达面板。");
+        }
+        // =====================================
+
+        console.log("🔒 [步骤 7] 执行后台二次登录 (已开启防陷阱识别)...");
         const emailInput = targetPage.locator('input[name="user"], input[name="username"], input[type="email"], input[type="text"]').filter({ state: 'visible' }).first();
         await emailInput.waitFor({ state: 'visible', timeout: 15000 });
         await emailInput.fill(MC_USERNAME);
@@ -120,7 +148,6 @@ async function autoSolveCaptcha(page) {
         const pwdInput = targetPage.locator('input[type="password"]').filter({ state: 'visible' }).first();
         await pwdInput.fill(MC_PASSWORD);
 
-        // 后端也同样采用 regex 灵活匹配
         const loginBtnBackend = targetPage.getByRole('button', { name: /LOGIN|登录|Sign In/i }).filter({ state: 'visible' }).first();
         await loginBtnBackend.click({ force: true });
         console.log("✅ [步骤 7] 账号密码已提交！");
@@ -129,7 +156,6 @@ async function autoSolveCaptcha(page) {
         const solvedAtLogin = await autoSolveCaptcha(targetPage);
         if (solvedAtLogin) {
             try {
-                // 如果破解完没自动跳转，再点一次灵活匹配的登录按钮
                 const loginBtnRetry = targetPage.getByRole('button', { name: /LOGIN|登录|Sign In/i }).filter({ state: 'visible' }).first();
                 if (await loginBtnRetry.isVisible({ timeout: 2000 })) {
                     await loginBtnRetry.click({ force: true });
@@ -142,7 +168,6 @@ async function autoSolveCaptcha(page) {
         await targetPage.waitForLoadState('networkidle');
         await targetPage.waitForTimeout(3000);
         
-        // 如果你的服务器改名了，请把 My renqi 换掉！
         const serverBlock = targetPage.getByText('My renqi', { exact: false }).first();
         await serverBlock.waitFor({ state: 'visible', timeout: 15000 });
         await serverBlock.click({ force: true });
