@@ -1,10 +1,13 @@
-const { chromium } = require('playwright');
+// 🌟 核心升级：引入隐身增强版 Playwright
+const { chromium } = require('playwright-extra');
+const stealth = require('puppeteer-extra-plugin-stealth')();
+chromium.use(stealth); // 披上隐身斗篷！
+
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const { execSync } = require('child_process');
 
-// 🌟 账号密码硬编码
 const MC_USERNAME = 'peng320829@gmail.com';
 const MC_PASSWORD = 'Qwer12138@'; 
 
@@ -25,7 +28,6 @@ async function sendTelegramMessage(text) {
     }
 }
 
-// 🌟 终极验证码克星
 async function autoSolveCaptcha(page) {
     try {
         const bframe = page.frameLocator('iframe[src*="bframe"]').first();
@@ -94,7 +96,7 @@ async function autoSolveCaptcha(page) {
     let targetPage;
 
     try {
-        console.log("🔥 [步骤 1] 正在点火启动浏览器 (启用解除跨域限制的终极参数)...");
+        console.log("🔥 [步骤 1] 正在点火启动浏览器 (启用隐身伪装 + 解除跨域限制的终极参数)...");
         
         context = await chromium.launchPersistentContext('', {
             headless: false, 
@@ -109,9 +111,11 @@ async function autoSolveCaptcha(page) {
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
                 '--disable-dev-shm-usage',
-                '--disable-gpu' 
+                '--disable-gpu',
+                '--window-size=1920,1080', // 增加真实分辨率伪装
+                '--disable-blink-features=AutomationControlled' // 🌟 核心防检测参数
             ],
-            ignoreDefaultArgs: ["--mute-audio"],
+            ignoreDefaultArgs: ["--mute-audio", "--enable-automation"], // 去除默认的自动化标识
         });
         console.log("✅ [步骤 1] 浏览器进程拉起成功！");
 
@@ -141,7 +145,7 @@ async function autoSolveCaptcha(page) {
                 console.log("⏳ [步骤 4] 账号密码已提交！进入最高警戒：盯防验证码...");
 
                 let loginSuccess = false;
-                for (let i = 0; i < 20; i++) { // 给足 40 秒的容错时间
+                for (let i = 0; i < 20; i++) { 
                     if (!targetPage.url().includes('auth/login')) {
                         loginSuccess = true;
                         console.log("🎉 [步骤 4] 验证通过！成功突破大门进入后台！");
