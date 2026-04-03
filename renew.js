@@ -39,24 +39,25 @@ async function autoSolveCaptcha(page) {
 
 (async () => {
     console.log("==========================================");
-    console.log("🚀 [步骤 0] 脚本启动，准备纯净环境...");
+    console.log("🚀 [步骤 0] 脚本启动，准备环境...");
     const busterPath = path.join(__dirname, 'extensions', 'buster', 'unpacked');
     
     let context;
     let targetPage;
 
     try {
-        console.log("🔥 [步骤 1] 正在点火启动浏览器 (已回退至最稳定启动参数)...");
+        console.log("🔥 [步骤 1] 正在点火启动浏览器 (使用黄金参数组合)...");
         
-        // ⚠️ 删除了所有花里胡哨的优化参数，回归最初的极简配置，解决死锁！
         context = await chromium.launchPersistentContext('', {
             headless: false,
             timeout: 120000, 
             args: [
                 `--disable-extensions-except=${busterPath}`,
                 `--load-extension=${busterPath}`,
-                '--no-sandbox',
-                '--disable-setuid-sandbox'
+                '--disable-gpu',             // 🌟 必须：防止 GPU 进程崩溃 (修复刚才的错误)
+                '--no-sandbox',              // 🌟 必须：Linux 运行权限
+                '--disable-setuid-sandbox',  // 🌟 必须：Linux 运行权限
+                '--disable-dev-shm-usage',   // 🌟 必须：防止 Docker 环境下内存溢出
             ],
             ignoreDefaultArgs: ["--mute-audio"],
         });
