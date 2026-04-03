@@ -34,9 +34,9 @@ async function autoSolveCaptcha(page) {
             
             let solverBtn = challengeFrame.locator('#solver-button');
             
-            // 如果没看到小黄人图标，先强行点击“耳机”图标切换到语音模式
+            // 如果没看到小黄人图标，强行点击“耳机”图标切换到语音模式
             if (!(await solverBtn.isVisible({ timeout: 2000 }))) {
-                console.log("  [侦测] ⚠️ 首屏未见 Buster 图标，强行点击耳机切入语音模式！");
+                console.log("  [侦测] ⚠️ 首屏未见 Buster 图标，尝试点击耳机切入语音模式...");
                 const audioBtn = challengeFrame.locator('#recaptcha-audio-button');
                 if (await audioBtn.isVisible({ timeout: 2000 })) {
                     await audioBtn.click({ force: true });
@@ -47,12 +47,12 @@ async function autoSolveCaptcha(page) {
             if (await solverBtn.isVisible({ timeout: 3000 })) {
                 console.log("  [侦测] 🤖 成功锁定 Buster 小黄人图标！正在点击破解...");
                 await solverBtn.click({ force: true });
-                console.log("  [侦测] ⏳ 已启动 Buster，等待 15 秒聆听并破解语音...");
+                console.log("  [侦测] ⏳ 已启动 Buster，等待最多 15 秒聆听并破解语音...");
                 await page.waitForTimeout(15000); 
                 console.log("  [侦测] ✅ Buster 破解动作执行完毕。");
                 return true;
             } else {
-                console.log("  [侦测] 🚨 致命异常：已经切入语音模式，但 Buster 插件仍未加载！(可能被拦截或文件缺失)");
+                console.log("  [侦测] 🚨 致命异常：已经切入语音模式，但 Buster 插件仍未出现！(可能环境修复失败)");
             }
         }
     } catch (e) {}
@@ -64,16 +64,23 @@ async function autoSolveCaptcha(page) {
     console.log("🚀 [步骤 0] 脚本启动，执行环境自检与强力自动修复...");
     
     // =====================================
-    // 🌟 核心升级 2.0：使用 curl -L 强力下载，并检查核心文件
+    // 🌟 核心升级 3.0：动态获取 GitHub Release
     // =====================================
     const busterPath = path.join(os.tmpdir(), 'buster-extension');
-    // 检查不仅是文件夹存在，还要确保里面的核心文件在
     if (!fs.existsSync(path.join(busterPath, 'manifest.json'))) {
-        console.log("📥 [环境修复] 正在使用强力 curl 工具下载 Buster 官方版本...");
+        console.log("📥 [环境修复] 正在通过 GitHub API 动态追踪最新版 Buster 插件...");
         try {
             fs.mkdirSync(busterPath, { recursive: true });
-            // 使用 stdio: 'inherit' 可以把下载进度和报错直接打印到日志里，一目了然
-            execSync('curl -L -o /tmp/buster.zip https://github.com/dessant/buster/releases/download/v2.0.1/buster-extension-2.0.1-chrome.zip', { stdio: 'inherit' });
+            
+            // 动态调用 API 查询最新的真实下载地址，防止写死的链接 404
+            const releaseJson = execSync('curl -sL https://api.github.com/repos/dessant/buster/releases/latest').toString();
+            const releaseData = JSON.parse(releaseJson);
+            const chromeAsset = releaseData.assets.find(a => a.name.toLowerCase().includes('chrome') && a.name.endsWith('.zip'));
+            
+            let downloadUrl = chromeAsset ? chromeAsset.browser_download_url : 'https://github.com/dessant/buster/releases/download/v2.0.1/buster-v2.0.1-chrome.zip';
+            console.log(`🔗 成功获取真实下载链接: ${downloadUrl}`);
+            
+            execSync(`curl -L -o /tmp/buster.zip "${downloadUrl}"`, { stdio: 'inherit' });
             execSync(`unzip -o /tmp/buster.zip -d ${busterPath}`, { stdio: 'inherit' });
             console.log(`✅ [环境修复] Buster 插件下载并解压成功: ${busterPath}`);
         } catch (e) {
