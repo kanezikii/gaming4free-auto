@@ -1,10 +1,9 @@
-name: gaming4free renew (WARP)
+name: gaming4free renew (WARP + Buster)
 
 on:
   workflow_dispatch:
-
   schedule:
-    - cron: "40 * * * *"   # 🕕 每天18:00（UTC）
+    - cron: "40 * * * *"
 
 jobs:
   run:
@@ -12,14 +11,9 @@ jobs:
     timeout-minutes: 15
 
     steps:
-      # =========================
-      # 🟡 0️⃣ 当前仓库
-      # =========================
       - uses: actions/checkout@v4
 
-      # =========================
-      # 🟡 ⭐ 私有仓库
-      # =========================
+      # 🟡 私有仓库提取 (路径精简为 scripts)
       - name: Checkout private repo
         uses: actions/checkout@v4
         with:
@@ -27,91 +21,72 @@ jobs:
           token: ${{ secrets.PRIVATE_REPO_TOKEN }}
           path: scripts
 
-      # =========================
-      # 🟡 Node环境
-      # =========================
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      # =========================
-      # 🟡 1️⃣ WARP
-      # =========================
       - name: 创建WARP网络
         uses: fscarmen/warp-on-actions@v1.3
         with:
           stack: dual
           mode: client
 
-      # =========================
-      # 🟡 2️⃣ 系统依赖（音频）
-      # =========================
+      # 🟡 系统依赖与虚拟音频
       - name: Install deps
         run: |
           sudo apt-get update
-          sudo apt-get install -y xvfb wget unzip curl jq p7zip-full \
-            pulseaudio alsa-utils ffmpeg
-
+          sudo apt-get install -y xvfb wget unzip curl jq p7zip-full pulseaudio alsa-utils ffmpeg
           pulseaudio --start --exit-idle-time=-1 || true
-
           pactl load-module module-null-sink sink_name=virtual_speaker || true
           pactl set-default-sink virtual_speaker || true
-
           pactl load-module module-virtual-source source_name=virtual_mic || true
           pactl set-default-source virtual_mic || true
 
-      # =========================
-      # 🟡 3️⃣ 安装 Playwright（修复点）
-      # =========================
+      # 🟡 补回 --with-deps
       - name: Install playwright
         run: |
           npm init -y
           npm install playwright
-          npx playwright install chromium
+          npx playwright install chromium --with-deps
 
-      # =========================
-      # 🟡 4️⃣ 下载 Buster
-      # =========================
-      - name: Download Buster
+      - name: Download and Unzip Buster
         run: |
           mkdir -p scripts/extensions/buster
-          wget -O scripts/extensions/buster/buster.zip \
-            https://github.com/dessant/buster/releases/download/v3.1.0/buster_captcha_solver_for_humans-3.1.0-chrome.zip
-
-      - name: Unzip Buster
-        run: |
+          wget -O scripts/extensions/buster/buster.zip https://github.com/dessant/buster/releases/download/v3.1.0/buster_captcha_solver_for_humans-3.1.0-chrome.zip
           mkdir -p scripts/extensions/buster/unpacked
           7z x -y scripts/extensions/buster/buster.zip -oscripts/extensions/buster/unpacked
 
-          echo "📦 Buster 解压完成"
-          ls -R scripts/extensions/buster/unpacked | head -50
-
-      # =========================
-      # 🟡 5️⃣ 调试 IP
-      # =========================
       - name: Check IP
         run: |
-          echo "🌍 当前 IP:"
-          curl -s https://api.ipify.org
-          echo
+          curl -s https://api.ipify.org && echo
           curl -s https://ipinfo.io
 
-      # =========================
-      # 🟡 6️⃣ 运行脚本
-      # =========================
+      # 🟡 补回环境变量注入
       - name: Run script
+        env:
+          MC_USERNAME: ${{ secrets.MC_USERNAME }}
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
         run: |
           mkdir -p scripts/screenshots
           xvfb-run -a node scripts/renew.js
 
-      # =========================
-      # 🟡 7️⃣ 上传截图
-      # =========================
       - name: Upload screenshots
         uses: actions/upload-artifact@v4
         if: always()
         with:
           name: screenshots
           path: scripts/screenshots/**
+          retention-days: 1
           if-no-files-found: warn
+
+      # 🟡 保留第一版的日志清理功能
+      - name: Delete old workflow runs
+        uses: Mattraks/delete-workflow-runs@v2
+        if: always()
+        with:
+          token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          retain_days: 0
+          keep_minimum_runs: 3
