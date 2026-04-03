@@ -23,22 +23,28 @@ async function sendTelegramMessage(text) {
 (async () => {
     console.log("🚀 启动浏览器...");
     const busterPath = path.join(__dirname, 'extensions', 'buster', 'unpacked');
-
-    const context = await chromium.launchPersistentContext('', {
-        headless: false,
-        args: [
-            `--disable-extensions-except=${busterPath}`,
-            `--load-extension=${busterPath}`,
-            '--no-sandbox',
-            '--disable-setuid-sandbox'
-        ],
-        ignoreDefaultArgs: ["--mute-audio"],
-    });
-
-    const page = await context.newPage();
-    let targetPage = page;
+    
+    let context;
+    let targetPage;
 
     try {
+        context = await chromium.launchPersistentContext('', {
+            headless: false,
+            args: [
+                `--disable-extensions-except=${busterPath}`,
+                `--load-extension=${busterPath}`,
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-gpu',                  // 禁用 GPU 硬件加速 (Actions 必备)
+                '--disable-software-rasterizer',  // 禁用软件光栅化器
+                '--disable-dev-shm-usage'         // 解决 Linux 环境下内存共享不足的问题
+            ],
+            ignoreDefaultArgs: ["--mute-audio"],
+        });
+
+        const page = await context.newPage();
+        targetPage = page;
+
         console.log("🌐 访问登录页...");
         await targetPage.goto('https://gaming4free.net/login', { waitUntil: 'networkidle' });
 
@@ -87,21 +93,16 @@ async function sendTelegramMessage(text) {
         await addTimeBtn.waitFor({ state: 'visible', timeout: 15000 });
         await addTimeBtn.click({ force: true });
 
-        // ==========================================
-        // 🌟 核心升级：激进的广告等待与弹窗清理策略
-        // ==========================================
+        // 5. 激进的广告等待与弹窗清理策略
         console.log("📺 进入广告/跳转处理阶段，最长等待 5 分钟...");
         let success = false;
         
         for (let i = 0; i < 60; i++) {
-            await targetPage.waitForTimeout(5000); // 每次等 5 秒
+            await targetPage.waitForTimeout(5000);
             
-            // 招式一：无脑按 ESC 键（可以直接关掉 90% 的网页居中弹窗，包括截图里那个）
             await targetPage.keyboard.press('Escape').catch(() => {});
             
-            // 招式二：尝试寻找并点击各种常见的关闭按钮图标 (X)
             try {
-                // 模糊匹配包含 close 的按钮或 SVG 图标
                 const closeBtn = targetPage.locator('button[aria-label*="lose" i], [class*="close" i], svg.lucide-x').first();
                 if (await closeBtn.isVisible({ timeout: 500 })) {
                     await closeBtn.click({ force: true });
@@ -109,7 +110,6 @@ async function sendTelegramMessage(text) {
                 }
             } catch (e) {}
 
-            // 招式三：检查是否已经跳回了控制台并且出现了 PLEASE WAIT
             try {
                 const waitBtn = targetPage.getByRole('button', { name: /PLEASE WAIT/i });
                 if (await waitBtn.isVisible({ timeout: 1000 })) {
@@ -123,7 +123,6 @@ async function sendTelegramMessage(text) {
         if (!success) {
             throw new Error("🚨 等待广告结束超时！可能是广告页面卡死，未能跳回控制台。");
         }
-        // ==========================================
 
         console.log("🎉 续期成功！");
         await sendTelegramMessage(`🎮 Gaming4Free 续期成功！\n账号: ${MC_USERNAME}`);
@@ -131,14 +130,26 @@ async function sendTelegramMessage(text) {
     } catch (error) {
         console.error("❌ 发生错误:", error);
         
-        const screenshotPath = path.join(__dirname, 'screenshots', `error-${Date.now()}.png`);
-        await targetPage.screenshot({ path: screenshotPath });
+        // 修复：判断页面是否存在，存在才截图，防止二次报错掩盖真实原因
+        if (targetPage) {
+            try {
+                const screenshotPath = path.join(__dirname, 'screenshots', `error-${Date.now()}.png`);
+                await targetPage.screenshot({ path: screenshotPath });
+                console.log("📸 已保存现场截图至 artifacts");
+            } catch (e) {
+                console.error("截图时发生错误:", e);
+            }
+        } else {
+            console.log("⚠️ 浏览器启动即崩溃，无法获取页面截图。");
+        }
         
         await sendTelegramMessage(`⚠️ 续期脚本崩溃！\n账号: ${MC_USERNAME}\n报错: ${error.message.substring(0, 100)}...`);
         process.exit(1);
         
     } finally {
-        await context.close();
+        if (context) {
+            await context.close();
+        }
         console.log("🛑 脚本运行结束。");
     }
 })();
