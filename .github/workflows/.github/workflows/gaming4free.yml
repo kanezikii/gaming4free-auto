@@ -1,0 +1,94 @@
+name: gaming4free renew (WARP + Buster)
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "40 * * * *"
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  run:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Checkout private repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/Gaming4Free-Auto-Private
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          path: gaming4free-auto
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: 创建WARP网络
+        uses: fscarmen/warp-on-actions@v1.3
+        with:
+          stack: dual
+          mode: client
+
+      - name: Install deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb wget unzip curl jq p7zip-full \
+            pulseaudio alsa-utils ffmpeg
+
+          pulseaudio --start --exit-idle-time=-1 || true
+
+          pactl load-module module-null-sink sink_name=virtual_speaker || true
+          pactl set-default-sink virtual_speaker || true
+
+          pactl load-module module-virtual-source source_name=virtual_mic || true
+          pactl set-default-source virtual_mic || true
+
+      - name: Install playwright
+        run: |
+          npm init -y
+          npm install playwright
+          npx playwright install chromium --with-deps
+
+      - name: Download and Unzip Buster
+        run: |
+          mkdir -p gaming4free-auto/scripts/extensions/buster
+          wget -O gaming4free-auto/scripts/extensions/buster/buster.zip https://github.com/dessant/buster/releases/download/v3.1.0/buster_captcha_solver_for_humans-3.1.0-chrome.zip
+          mkdir -p gaming4free-auto/scripts/extensions/buster/unpacked
+          7z x -y gaming4free-auto/scripts/extensions/buster/buster.zip -ogaming4free-auto/scripts/extensions/buster/unpacked
+
+      - name: Check IP
+        run: |
+          curl -s https://api.ipify.org && echo
+          curl -s https://ipinfo.io
+
+      - name: Run script
+        env:
+          MC_USERNAME: ${{ secrets.MC_USERNAME }}
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+        run: |
+          mkdir -p gaming4free-auto/scripts/screenshots
+          xvfb-run -a node gaming4free-auto/scripts/renew.js
+
+      - name: Upload screenshots
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screenshots
+          path: gaming4free-auto/scripts/screenshots/**
+          retention-days: 1 # 截图构建产物也建议设置极短的保留时间，节省空间
+
+      - name: Delete old workflow runs
+        uses: Mattraks/delete-workflow-runs@v2
+        if: always() # 确保即使前面的脚本运行失败，也会执行清理
+        with:
+          token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          retain_days: 0 # 设置为 0 天，主要依赖下方的保留次数
+          keep_minimum_runs: 3 # 核心设置：始终保留最近 3 次运行记录
