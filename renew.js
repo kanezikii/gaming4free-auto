@@ -30,36 +30,37 @@ async function sendTelegramMessage(text) {
 
 async function autoSolveCaptcha(page) {
     try {
-        const bframe = page.frameLocator('iframe[src*="bframe"]').first();
+        // 🌟 核心修复：只寻找当前屏幕上【肉眼可见的】验证码弹窗！(无视被谷歌隐藏的幽灵窗口)
+        const visibleIframe = page.locator('iframe[src*="api2/bframe"]').filter({ state: 'visible' }).first();
         
-        const solverBtn = bframe.locator('#solver-button');
-        const audioBtn = bframe.locator('#recaptcha-audio-button');
-        
-        if (await solverBtn.isVisible({ timeout: 1500 }) || await audioBtn.isVisible({ timeout: 1500 })) {
-            console.log("  [侦测] 🎧 发现 reCAPTCHA 验证码弹窗！");
+        if (await visibleIframe.isVisible({ timeout: 1500 })) {
+            console.log("  [侦测] 🎧 发现当前活动的 reCAPTCHA 弹窗！");
+            const bframe = visibleIframe.contentFrame(); // 获取真实的内部框架
             
-            if (await solverBtn.isVisible({ timeout: 1000 })) {
-                console.log("  [侦测] 🤖 成功锁定 Buster 小黄人图标！正在强行点击破解...");
-                await solverBtn.click({ force: true });
-                console.log("  [侦测] ⏳ 已启动 Buster，等待 15 秒聆听并破解语音...");
-                await page.waitForTimeout(15000); 
-                console.log("  [侦测] ✅ Buster 破解动作执行完毕。");
-                return true;
-            } else if (await audioBtn.isVisible({ timeout: 1000 })) {
-                console.log("  [侦测] ⚠️ 首屏未见 Buster，强行点击耳机切入语音模式！");
-                await audioBtn.click({ force: true });
+            const solverBtn = bframe.locator('#solver-button');
+            const audioBtn = bframe.locator('#recaptcha-audio-button');
+            
+            // 如果还没切到语音界面，先强行切过去
+            if (await audioBtn.isVisible({ timeout: 1000 }) && !(await solverBtn.isVisible({ timeout: 1000 }))) {
+                console.log("  [侦测] ⚠️ 未见 Buster，尝试点击耳机切入语音模式...");
+                await audioBtn.click({ delay: 100 });
                 await page.waitForTimeout(1500); 
+            }
+
+            // 锁定并激活 Buster
+            if (await solverBtn.isVisible({ timeout: 2000 })) {
+                console.log("  [侦测] 🤖 成功锁定 Buster！正在执行强制双重点击...");
                 
-                if (await solverBtn.isVisible({ timeout: 2000 })) {
-                    console.log("  [侦测] 🤖 成功锁定 Buster 小黄人图标！正在点击破解...");
-                    await solverBtn.click({ force: true });
-                    console.log("  [侦测] ⏳ 已启动 Buster，等待 15 秒聆听并破解语音...");
-                    await page.waitForTimeout(15000); 
-                    console.log("  [侦测] ✅ Buster 破解动作执行完毕。");
-                    return true;
-                } else {
-                    console.log("  [侦测] 🚨 致命异常：切入语音模式后 Buster 仍未加载！");
-                }
+                // 🌟 双重保险：同时发送底层 JS 点击和物理点击，保证必定点中
+                await solverBtn.evaluate(node => node.click()).catch(() => {});
+                await solverBtn.click({ force: true, delay: 150 }).catch(() => {});
+                
+                console.log("  [侦测] ⏳ 已经触发 Buster，等待 15 秒破解并自动填写...");
+                await page.waitForTimeout(15000); 
+                console.log("  [侦测] ✅ Buster 回合结束。");
+                return true;
+            } else {
+                console.log("  [侦测] 🚨 异常：未能找到 Buster 按钮。");
             }
         }
     } catch (e) {
@@ -112,10 +113,10 @@ async function autoSolveCaptcha(page) {
                 '--disable-setuid-sandbox',
                 '--disable-dev-shm-usage',
                 '--disable-gpu',
-                '--window-size=1920,1080', // 增加真实分辨率伪装
-                '--disable-blink-features=AutomationControlled' // 🌟 核心防检测参数
+                '--window-size=1920,1080', 
+                '--disable-blink-features=AutomationControlled' 
             ],
-            ignoreDefaultArgs: ["--mute-audio", "--enable-automation"], // 去除默认的自动化标识
+            ignoreDefaultArgs: ["--mute-audio", "--enable-automation"], 
         });
         console.log("✅ [步骤 1] 浏览器进程拉起成功！");
 
