@@ -1,0 +1,117 @@
+name: gaming4free renew (WARP)
+
+on:
+  workflow_dispatch:
+
+  schedule:
+    - cron: "40 * * * *"   # 🕕 每天18:00（UTC）
+
+jobs:
+  run:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+
+    steps:
+      # =========================
+      # 🟡 0️⃣ 当前仓库
+      # =========================
+      - uses: actions/checkout@v4
+
+      # =========================
+      # 🟡 ⭐ 私有仓库
+      # =========================
+      - name: Checkout private repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/gaming4free-auto
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          path: scripts
+
+      # =========================
+      # 🟡 Node环境
+      # =========================
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # =========================
+      # 🟡 1️⃣ WARP
+      # =========================
+      - name: 创建WARP网络
+        uses: fscarmen/warp-on-actions@v1.3
+        with:
+          stack: dual
+          mode: client
+
+      # =========================
+      # 🟡 2️⃣ 系统依赖（音频）
+      # =========================
+      - name: Install deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb wget unzip curl jq p7zip-full \
+            pulseaudio alsa-utils ffmpeg
+
+          pulseaudio --start --exit-idle-time=-1 || true
+
+          pactl load-module module-null-sink sink_name=virtual_speaker || true
+          pactl set-default-sink virtual_speaker || true
+
+          pactl load-module module-virtual-source source_name=virtual_mic || true
+          pactl set-default-source virtual_mic || true
+
+      # =========================
+      # 🟡 3️⃣ 安装 Playwright（修复点）
+      # =========================
+      - name: Install playwright
+        run: |
+          npm init -y
+          npm install playwright
+          npx playwright install chromium
+
+      # =========================
+      # 🟡 4️⃣ 下载 Buster
+      # =========================
+      - name: Download Buster
+        run: |
+          mkdir -p scripts/extensions/buster
+          wget -O scripts/extensions/buster/buster.zip \
+            https://github.com/dessant/buster/releases/download/v3.1.0/buster_captcha_solver_for_humans-3.1.0-chrome.zip
+
+      - name: Unzip Buster
+        run: |
+          mkdir -p scripts/extensions/buster/unpacked
+          7z x -y scripts/extensions/buster/buster.zip -oscripts/extensions/buster/unpacked
+
+          echo "📦 Buster 解压完成"
+          ls -R scripts/extensions/buster/unpacked | head -50
+
+      # =========================
+      # 🟡 5️⃣ 调试 IP
+      # =========================
+      - name: Check IP
+        run: |
+          echo "🌍 当前 IP:"
+          curl -s https://api.ipify.org
+          echo
+          curl -s https://ipinfo.io
+
+      # =========================
+      # 🟡 6️⃣ 运行脚本
+      # =========================
+      - name: Run script
+        run: |
+          mkdir -p scripts/screenshots
+          xvfb-run -a node scripts/renew.js
+
+      # =========================
+      # 🟡 7️⃣ 上传截图
+      # =========================
+      - name: Upload screenshots
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screenshots
+          path: scripts/screenshots/**
+          if-no-files-found: warn
