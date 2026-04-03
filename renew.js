@@ -1,13 +1,11 @@
 const { chromium } = require('playwright');
 const path = require('path');
 
-// 从 GitHub Actions 提取环境变量
 const MC_USERNAME = process.env.MC_USERNAME;
 const MC_PASSWORD = process.env.MC_PASSWORD; 
 const TG_BOT_TOKEN = process.env.TG_BOT_TOKEN;
 const TG_CHAT_ID = process.env.TG_CHAT_ID;
 
-// 发送 TG 通知的方法
 async function sendTelegramMessage(text) {
     if (!TG_BOT_TOKEN || !TG_CHAT_ID) return;
     const url = `https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage`;
@@ -27,18 +25,18 @@ async function sendTelegramMessage(text) {
     const busterPath = path.join(__dirname, 'extensions', 'buster', 'unpacked');
 
     const context = await chromium.launchPersistentContext('', {
-        headless: false, // 必须为 false 才能加载 Buster 插件
+        headless: false,
         args: [
             `--disable-extensions-except=${busterPath}`,
             `--load-extension=${busterPath}`,
             '--no-sandbox',
             '--disable-setuid-sandbox'
         ],
-        ignoreDefaultArgs: ["--mute-audio"], // 允许播放声音，防验证码拦截
+        ignoreDefaultArgs: ["--mute-audio"],
     });
 
     const page = await context.newPage();
-    let targetPage = page; // 用于跟踪当前处于焦点的页面
+    let targetPage = page;
 
     try {
         console.log("🌐 访问登录页...");
@@ -50,18 +48,30 @@ async function sendTelegramMessage(text) {
         await targetPage.locator('input[type="password"]').fill(MC_PASSWORD);
         await targetPage.getByRole('button', { name: 'Sign In' }).click();
 
-        // 等待登录成功并进入 Dashboard
         await targetPage.waitForURL('**/dashboard**', { timeout: 20000 })
             .catch(() => console.log("未检测到标准 URL 跳转，继续尝试..."));
         await targetPage.waitForLoadState('networkidle');
 
+        // ==========================================
+        // 🌟 新增逻辑：处理随机出现的 Welcome 弹窗
+        // ==========================================
+        console.log("🔍 检查是否有新手引导弹窗...");
+        try {
+            // 给它 5 秒钟时间找 Skip 按钮，找到了就点，找不到就进入 catch 分支忽略它
+            const skipBtn = targetPage.getByRole('button', { name: 'Skip', exact: true });
+            await skipBtn.click({ timeout: 5000 });
+            console.log("👀 发现新手引导，已点击 Skip 跳过。");
+            await targetPage.waitForTimeout(1000); // 稍微等 1 秒让弹窗动画消失
+        } catch (error) {
+            console.log("✅ 没有新手引导弹窗，继续执行。");
+        }
+        // ==========================================
+
         // 2. 点击 Panel (外部跳转图标)
         console.log("🎛️ 准备进入服务器后台 Panel...");
-        // 查找包含 target="_blank" 的 a 标签（通常是这种面板右下角的跳转图标）
         const panelPromise = context.waitForEvent('page').catch(() => null);
         await targetPage.locator('a[target="_blank"]').last().click();
         
-        // 如果点击后新开了一个标签页，就把控制权交给新标签页
         const newPage = await panelPromise;
         if (newPage) {
             targetPage = newPage;
@@ -70,7 +80,6 @@ async function sendTelegramMessage(text) {
 
         // 3. 点击 Console
         console.log("💻 正在进入 Console 面板...");
-        // 根据截图4，顶部导航包含 Console
         await targetPage.getByText('Console', { exact: true }).click();
         await targetPage.waitForLoadState('networkidle');
 
@@ -82,9 +91,8 @@ async function sendTelegramMessage(text) {
 
         // 5. 等待广告读秒结束
         console.log("📺 广告时间... 正在等待状态变更为 PLEASE WAIT...");
-        // 设一个 5 分钟的超长等待，确保广告能播完
         const waitBtn = targetPage.getByRole('button', { name: /PLEASE WAIT/i });
-        await waitBtn.waitFor({ state: 'visible', timeout: 20 });
+        await waitBtn.waitFor({ state: 'visible', timeout: 300000 });
 
         console.log("✅ 续期成功！");
         await sendTelegramMessage(`🎮 Gaming4Free 续期成功！\n账号: ${MC_USERNAME}`);
@@ -92,12 +100,11 @@ async function sendTelegramMessage(text) {
     } catch (error) {
         console.error("❌ 发生错误:", error);
         
-        // 截图留证
         const screenshotPath = path.join(__dirname, 'screenshots', `error-${Date.now()}.png`);
         await targetPage.screenshot({ path: screenshotPath });
         
-        await sendTelegramMessage(`⚠️ 续期脚本崩溃！\n账号: ${MC_USERNAME}\n详见 Actions 截图日志。\n报错: ${error.message.substring(0, 100)}...`);
-        process.exit(1); // 抛出异常，让 GitHub Actions 标记为失败 (红叉)
+        await sendTelegramMessage(`⚠️ 续期脚本崩溃！\n账号: ${MC_USERNAME}\n报错: ${error.message.substring(0, 100)}...`);
+        process.exit(1);
         
     } finally {
         await context.close();
