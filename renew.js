@@ -1,7 +1,7 @@
 // 🌟 核心升级：引入隐身增强版 Playwright
 const { chromium } = require('playwright-extra');
 const stealth = require('puppeteer-extra-plugin-stealth')();
-chromium.use(stealth); // 披上隐身斗篷！
+chromium.use(stealth); 
 
 const path = require('path');
 const fs = require('fs');
@@ -23,48 +23,61 @@ async function sendTelegramMessage(text) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ chat_id: TG_CHAT_ID, text: text })
         });
-    } catch (e) {
-        console.error("TG通知发送失败:", e);
-    }
+    } catch (e) {}
 }
 
+// 🌟 终极验证码克星：遍历排雷 + 底层 JS 强制触发
 async function autoSolveCaptcha(page) {
     try {
-        // 🌟 核心修复：只寻找当前屏幕上【肉眼可见的】验证码弹窗！(无视被谷歌隐藏的幽灵窗口)
-        const visibleIframe = page.locator('iframe[src*="api2/bframe"]').filter({ state: 'visible' }).first();
+        // 获取页面里所有的验证码挑战框 (防幽灵弹窗)
+        const bframeLocators = page.frameLocator('iframe[src*="api2/bframe"]');
+        const count = await bframeLocators.count();
         
-        if (await visibleIframe.isVisible({ timeout: 1500 })) {
-            console.log("  [侦测] 🎧 发现当前活动的 reCAPTCHA 弹窗！");
-            const bframe = visibleIframe.contentFrame(); // 获取真实的内部框架
+        for (let i = 0; i < count; i++) {
+            const bframe = bframeLocators.nth(i);
             
-            const solverBtn = bframe.locator('#solver-button');
-            const audioBtn = bframe.locator('#recaptcha-audio-button');
+            // 判断当前这个框是否在屏幕上激活 (图片九宫格或语音面板可见)
+            const isActive = await bframe.locator('.rc-imageselect-payload, .rc-audiochallenge-payload').first().isVisible({timeout: 1000}).catch(()=>false);
             
-            // 如果还没切到语音界面，先强行切过去
-            if (await audioBtn.isVisible({ timeout: 1000 }) && !(await solverBtn.isVisible({ timeout: 1000 }))) {
-                console.log("  [侦测] ⚠️ 未见 Buster，尝试点击耳机切入语音模式...");
-                await audioBtn.click({ delay: 100 });
-                await page.waitForTimeout(1500); 
-            }
+            if (isActive) {
+                console.log(`  [侦测] 🎧 锁定当前活动的 reCAPTCHA 弹窗 (Frame ${i})！`);
+                
+                // 1. 如果还在图片模式，强行切到语音模式
+                const audioBtn = bframe.locator('#recaptcha-audio-button');
+                if (await audioBtn.isVisible({timeout: 1000})) {
+                    console.log("  [侦测] 正在点击耳机切换至语音模式...");
+                    await audioBtn.click({force: true});
+                    await page.waitForTimeout(1500); // 等待切换动画
+                }
 
-            // 锁定并激活 Buster
-            if (await solverBtn.isVisible({ timeout: 2000 })) {
-                console.log("  [侦测] 🤖 成功锁定 Buster！正在执行强制双重点击...");
+                // 2. 无视 Playwright 洁癖，直接把 JS 注入底层寻找并触发 Buster
+                console.log("  [侦测] 正在通过底层 JS 强行激活 Buster 插件...");
                 
-                // 🌟 双重保险：同时发送底层 JS 点击和物理点击，保证必定点中
-                await solverBtn.evaluate(node => node.click()).catch(() => {});
-                await solverBtn.click({ force: true, delay: 150 }).catch(() => {});
-                
-                console.log("  [侦测] ⏳ 已经触发 Buster，等待 15 秒破解并自动填写...");
-                await page.waitForTimeout(15000); 
-                console.log("  [侦测] ✅ Buster 回合结束。");
-                return true;
-            } else {
-                console.log("  [侦测] 🚨 异常：未能找到 Buster 按钮。");
+                // 给插件 3 秒钟时间注入按钮
+                await bframe.locator('#solver-button').waitFor({ state: 'attached', timeout: 3000 }).catch(()=>{});
+
+                // 注入核弹级强杀代码
+                const clicked = await bframe.locator(':root').evaluate((root) => {
+                    const solverBtn = root.querySelector('#solver-button');
+                    if (solverBtn) {
+                        solverBtn.click(); // 原生代码直接触发点击，无视遮挡
+                        return true;
+                    }
+                    return false;
+                }).catch(() => false);
+
+                if (clicked) {
+                    console.log("  [侦测] 🤖 成功强制触发 Buster！等待 15 秒聆听并破解...");
+                    await page.waitForTimeout(15000); 
+                    console.log("  [侦测] ✅ Buster 破解回合结束。");
+                    return true;
+                } else {
+                    console.log("  [侦测] 🚨 异常：当前框架内未找到 Buster 按钮，可能还在加载...");
+                }
             }
         }
     } catch (e) {
-        // 忽略静默错误
+        // 静默处理，不影响主流程
     }
     return false;
 }
