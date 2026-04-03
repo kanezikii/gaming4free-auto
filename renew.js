@@ -1,7 +1,5 @@
 const { chromium } = require('playwright');
 const path = require('path');
-const os = require('os');
-const fs = require('fs');
 
 const MC_USERNAME = process.env.MC_USERNAME;
 const MC_PASSWORD = process.env.MC_PASSWORD; 
@@ -41,33 +39,24 @@ async function autoSolveCaptcha(page) {
 
 (async () => {
     console.log("==========================================");
-    console.log("🚀 [步骤 0] 脚本启动，开始准备环境...");
+    console.log("🚀 [步骤 0] 脚本启动，准备纯净环境...");
     const busterPath = path.join(__dirname, 'extensions', 'buster', 'unpacked');
-    console.log(`📂 [步骤 0] Buster 插件路径: ${busterPath}`);
     
-    console.log("📂 [步骤 0] 正在创建浏览器临时配置文件...");
-    const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pw-profile-')); 
-    console.log(`📂 [步骤 0] 临时配置目录已创建: ${userDataDir}`);
-
     let context;
     let targetPage;
 
     try {
-        console.log("🔥 [步骤 1] 正在点火启动浏览器 (赋予最高 3 分钟超时权限)...");
-        // 如果死在这里，说明 GitHub 服务器环境彻底拉垮
-        context = await chromium.launchPersistentContext(userDataDir, {
+        console.log("🔥 [步骤 1] 正在点火启动浏览器 (已回退至最稳定启动参数)...");
+        
+        // ⚠️ 删除了所有花里胡哨的优化参数，回归最初的极简配置，解决死锁！
+        context = await chromium.launchPersistentContext('', {
             headless: false,
-            timeout: 180000, // 霸气给足 3 分钟启动时间
+            timeout: 120000, 
             args: [
                 `--disable-extensions-except=${busterPath}`,
                 `--load-extension=${busterPath}`,
                 '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-gpu',
-                '--disable-dev-shm-usage',
-                '--window-size=1280,960',
-                '--ignore-certificate-errors',
-                '--disable-blink-features=AutomationControlled'
+                '--disable-setuid-sandbox'
             ],
             ignoreDefaultArgs: ["--mute-audio"],
         });
@@ -76,7 +65,7 @@ async function autoSolveCaptcha(page) {
         console.log("📄 [步骤 2] 正在创建新标签页...");
         const page = await context.newPage();
         targetPage = page;
-        console.log("✅ [步骤 2] 标签页创建成功！(从现在起如果报错，将会有截图)");
+        console.log("✅ [步骤 2] 标签页创建成功！");
 
         console.log("🌐 [步骤 3] 正在访问前台登录页...");
         await targetPage.goto('https://gaming4free.net/login', { waitUntil: 'networkidle', timeout: 60000 });
@@ -86,11 +75,8 @@ async function autoSolveCaptcha(page) {
         await targetPage.locator('input[type="email"]').fill(MC_USERNAME);
         await targetPage.locator('input[type="password"]').fill(MC_PASSWORD);
         await targetPage.getByRole('button', { name: 'Sign In' }).click();
-        console.log("⏳ [步骤 4] 已点击登录，等待跳转 Dashboard...");
-
-        await targetPage.waitForURL('**/dashboard**', { timeout: 30000 }).catch(() => {
-            console.log("⚠️ [步骤 4] URL 未发生标准跳转，但将继续尝试执行后续逻辑...");
-        });
+        
+        await targetPage.waitForURL('**/dashboard**', { timeout: 30000 }).catch(() => {});
         await targetPage.waitForLoadState('networkidle');
 
         console.log("🔍 [步骤 5] 检查前台新手引导弹窗...");
@@ -113,8 +99,6 @@ async function autoSolveCaptcha(page) {
             targetPage = newPage;
             await targetPage.waitForLoadState('domcontentloaded');
             console.log("✅ [步骤 6] 已成功切换至后台新标签页。");
-        } else {
-            console.log("⚠️ [步骤 6] 未检测到新开标签页，继续在当前页面操作。");
         }
 
         console.log("🔒 [步骤 7] 执行后台二次登录...");
@@ -159,7 +143,7 @@ async function autoSolveCaptcha(page) {
         let success = false;
         
         for (let i = 1; i <= 60; i++) {
-            await targetPage.waitForTimeout(5000); // 每次等 5 秒
+            await targetPage.waitForTimeout(5000); 
             if (i % 6 === 0) console.log(`  -> 巡逻中... 已等待 ${i * 5} 秒`);
             
             await targetPage.keyboard.press('Escape').catch(() => {});
@@ -184,7 +168,7 @@ async function autoSolveCaptcha(page) {
         }
 
         if (!success) {
-            throw new Error("🚨 [致命错误] 5分钟已耗尽，未能跳回控制台，广告页面可能卡死或验证码无法通过。");
+            throw new Error("🚨 [致命错误] 5分钟已耗尽，未能跳回控制台。");
         }
 
         console.log("==========================================");
@@ -201,12 +185,7 @@ async function autoSolveCaptcha(page) {
                 const screenshotPath = path.join(__dirname, 'screenshots', `error-${Date.now()}.png`);
                 await targetPage.screenshot({ path: screenshotPath });
                 console.log("✅ 取证完毕，截图已保存。");
-            } catch (e) {
-                console.error("⚠️ 拍照取证失败:", e.message);
-            }
-        } else {
-            console.log("⚠️ 浏览器在启动阶段直接暴毙，无法提取网页截图。");
-            console.log("💡 如果你看到这条信息，说明是 GitHub 服务器分配的机器太卡，连浏览器都打不开。");
+            } catch (e) {}
         }
         
         await sendTelegramMessage(`⚠️ 续期脚本崩溃！\n账号: ${MC_USERNAME}\n报错: ${error.message.substring(0, 100)}...`);
