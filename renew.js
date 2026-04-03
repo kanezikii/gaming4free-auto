@@ -52,27 +52,22 @@ async function sendTelegramMessage(text) {
             .catch(() => console.log("未检测到标准 URL 跳转，继续尝试..."));
         await targetPage.waitForLoadState('networkidle');
 
-        // ==========================================
-        // 🌟 优化逻辑：处理随机出现的 Welcome 弹窗
-        // ==========================================
+        // 处理新手引导弹窗
         console.log("🔍 检查是否有新手引导弹窗...");
         try {
-            // 放宽限制：只要是内容包含 Skip 的元素就尝试点击
             const skipBtn = targetPage.getByText('Skip', { exact: true });
             await skipBtn.waitFor({ state: 'visible', timeout: 5000 });
             await skipBtn.click();
             console.log("👀 发现新手引导，已点击 Skip 跳过。");
             await targetPage.waitForTimeout(1000); 
         } catch (error) {
-            console.log("✅ 5秒内未检测到弹窗，或已被安全忽略，继续执行。");
+            console.log("✅ 5秒内未检测到弹窗，继续执行。");
         }
-        // ==========================================
 
         // 2. 点击 Panel (外部跳转图标)
         console.log("🎛️ 准备进入服务器后台 Panel...");
         const panelPromise = context.waitForEvent('page').catch(() => null);
         
-        // 🌟 终极防弹衣：添加 { force: true }，无视任何弹窗强行点击！
         await targetPage.locator('a[target="_blank"]').last().click({ force: true });
         
         const newPage = await panelPromise;
@@ -90,15 +85,47 @@ async function sendTelegramMessage(text) {
         console.log("⏳ 正在寻找并点击 ADD 90 MINUTES...");
         const addTimeBtn = targetPage.getByRole('button', { name: /ADD 90 MINUTES/i });
         await addTimeBtn.waitFor({ state: 'visible', timeout: 15000 });
-        // 在这里也加上 force，防止里面也有什么奇奇怪怪的悬浮窗挡着
         await addTimeBtn.click({ force: true });
 
-        // 5. 等待广告读秒结束
-        console.log("📺 广告时间... 正在等待状态变更为 PLEASE WAIT...");
-        const waitBtn = targetPage.getByRole('button', { name: /PLEASE WAIT/i });
-        await waitBtn.waitFor({ state: 'visible', timeout: 300000 });
+        // ==========================================
+        // 🌟 核心升级：激进的广告等待与弹窗清理策略
+        // ==========================================
+        console.log("📺 进入广告/跳转处理阶段，最长等待 5 分钟...");
+        let success = false;
+        
+        for (let i = 0; i < 60; i++) {
+            await targetPage.waitForTimeout(5000); // 每次等 5 秒
+            
+            // 招式一：无脑按 ESC 键（可以直接关掉 90% 的网页居中弹窗，包括截图里那个）
+            await targetPage.keyboard.press('Escape').catch(() => {});
+            
+            // 招式二：尝试寻找并点击各种常见的关闭按钮图标 (X)
+            try {
+                // 模糊匹配包含 close 的按钮或 SVG 图标
+                const closeBtn = targetPage.locator('button[aria-label*="lose" i], [class*="close" i], svg.lucide-x').first();
+                if (await closeBtn.isVisible({ timeout: 500 })) {
+                    await closeBtn.click({ force: true });
+                    console.log("💥 检测到阻碍跳转的广告弹窗，已强行关闭！");
+                }
+            } catch (e) {}
 
-        console.log("✅ 续期成功！");
+            // 招式三：检查是否已经跳回了控制台并且出现了 PLEASE WAIT
+            try {
+                const waitBtn = targetPage.getByRole('button', { name: /PLEASE WAIT/i });
+                if (await waitBtn.isVisible({ timeout: 1000 })) {
+                    success = true;
+                    console.log("✅ 成功回到控制台，已进入 PLEASE WAIT 续期等待状态！");
+                    break;
+                }
+            } catch (e) {}
+        }
+
+        if (!success) {
+            throw new Error("🚨 等待广告结束超时！可能是广告页面卡死，未能跳回控制台。");
+        }
+        // ==========================================
+
+        console.log("🎉 续期成功！");
         await sendTelegramMessage(`🎮 Gaming4Free 续期成功！\n账号: ${MC_USERNAME}`);
 
     } catch (error) {
