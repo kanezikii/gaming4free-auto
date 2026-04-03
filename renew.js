@@ -74,10 +74,15 @@ async function autoSolveCaptcha(page) {
         console.log("✅ [步骤 3] 页面加载完成。");
 
         console.log("🔑 [步骤 4] 正在输入前台账号密码...");
-        // 前台同样加上可见性过滤，防患未然
+        // 前台输入框加上可见性过滤
         await targetPage.locator('input[type="email"]').filter({ state: 'visible' }).first().fill(MC_USERNAME);
         await targetPage.locator('input[type="password"]').filter({ state: 'visible' }).first().fill(MC_PASSWORD);
-        await targetPage.getByRole('button', { name: 'Sign In' }).click();
+        
+        // 🌟 本次修复核心：使用更灵活的 regex 进行模糊匹配，并强行点击
+        console.log("⏳ [步骤 4] 尝试定位并点击登录按钮 (使用模糊匹配+强行点击)...");
+        const loginBtn = targetPage.getByRole('button', { name: /LOGIN|登录|Sign In/i }).filter({ state: 'visible' }).first();
+        await loginBtn.click({ force: true });
+        console.log("⏳ [步骤 4] 账号密码已提交！等待跳转 Dashboard...");
         
         await targetPage.waitForURL('**/dashboard**', { timeout: 30000 }).catch(() => {});
         await targetPage.waitForLoadState('networkidle');
@@ -105,12 +110,9 @@ async function autoSolveCaptcha(page) {
             console.log("✅ [步骤 6] 已成功切换至后台新标签页。");
         }
 
-        // =====================================
-        // 🌟 本次修复核心：防诱捕逻辑
-        // =====================================
         console.log("🔒 [步骤 7] 执行后台二次登录 (已开启防陷阱识别)...");
         
-        // 过滤掉所有被隐藏的输入框，只找屏幕上肉眼可见的那个
+        // 过滤掉所有被隐藏的诱捕诱饵输入框
         const emailInput = targetPage.locator('input[name="user"], input[name="username"], input[type="email"], input[type="text"]').filter({ state: 'visible' }).first();
         await emailInput.waitFor({ state: 'visible', timeout: 15000 });
         await emailInput.fill(MC_USERNAME);
@@ -118,14 +120,16 @@ async function autoSolveCaptcha(page) {
         const pwdInput = targetPage.locator('input[type="password"]').filter({ state: 'visible' }).first();
         await pwdInput.fill(MC_PASSWORD);
 
-        const loginBtn = targetPage.getByRole('button', { name: /LOGIN|登录|Sign In/i }).filter({ state: 'visible' }).first();
-        await loginBtn.click({ force: true });
+        // 后端也同样采用 regex 灵活匹配
+        const loginBtnBackend = targetPage.getByRole('button', { name: /LOGIN|登录|Sign In/i }).filter({ state: 'visible' }).first();
+        await loginBtnBackend.click({ force: true });
         console.log("✅ [步骤 7] 账号密码已提交！");
 
         console.log("🤖 [步骤 8] 检查后台登录时是否弹出验证码...");
         const solvedAtLogin = await autoSolveCaptcha(targetPage);
         if (solvedAtLogin) {
             try {
+                // 如果破解完没自动跳转，再点一次灵活匹配的登录按钮
                 const loginBtnRetry = targetPage.getByRole('button', { name: /LOGIN|登录|Sign In/i }).filter({ state: 'visible' }).first();
                 if (await loginBtnRetry.isVisible({ timeout: 2000 })) {
                     await loginBtnRetry.click({ force: true });
@@ -138,6 +142,7 @@ async function autoSolveCaptcha(page) {
         await targetPage.waitForLoadState('networkidle');
         await targetPage.waitForTimeout(3000);
         
+        // 如果你的服务器改名了，请把 My renqi 换掉！
         const serverBlock = targetPage.getByText('My renqi', { exact: false }).first();
         await serverBlock.waitFor({ state: 'visible', timeout: 15000 });
         await serverBlock.click({ force: true });
