@@ -1,7 +1,7 @@
 const { chromium } = require('playwright');
 const path = require('path');
 
-// 🌟 账号密码已硬编码，绝不丢失
+// 🌟 账号密码已硬编码
 const MC_USERNAME = 'peng320829@gmail.com';
 const MC_PASSWORD = 'Qwer12138@'; 
 
@@ -22,17 +22,18 @@ async function sendTelegramMessage(text) {
     }
 }
 
+// 增强版验证码侦测，扩大了 iframe 的匹配范围
 async function autoSolveCaptcha(page) {
     try {
-        const challengeFrame = page.frameLocator('iframe[src*="recaptcha/api2/bframe"]').first();
+        const challengeFrame = page.frameLocator('iframe[src*="bframe"], iframe[title*="recaptcha payload" i]').first();
         const solverBtn = challengeFrame.locator('#solver-button');
         
         if (await solverBtn.isVisible({ timeout: 2000 })) {
-            console.log("  [侦测] 🎧 发现 reCAPTCHA 验证码！正在呼叫 Buster...");
+            console.log("  [侦测] 🎧 发现 reCAPTCHA 验证码阻拦！正在呼叫 Buster...");
             await solverBtn.click({ force: true });
-            console.log("  [侦测] ⏳ 已点击 Buster，等待 12 秒破解...");
-            await page.waitForTimeout(12000); 
-            console.log("  [侦测] ✅ Buster 破解等待结束。");
+            console.log("  [侦测] ⏳ 已点击 Buster，等待 15 秒破解语音...");
+            await page.waitForTimeout(15000); 
+            console.log("  [侦测] ✅ Buster 破解动作执行完毕。");
             return true;
         }
     } catch (e) {}
@@ -71,15 +72,11 @@ async function autoSolveCaptcha(page) {
         targetPage = page;
         console.log("✅ [步骤 2] 标签页创建成功！");
 
-        // =====================================
-        // 🌟 核心升级：跳过所有前台，直捣黄龙！
-        // =====================================
         console.log("🌐 [步骤 3] 终极捷径：绕过前台广告，直达核心 Panel 面板...");
         await targetPage.goto('https://panel.gaming4free.net', { waitUntil: 'networkidle', timeout: 60000 });
 
         console.log("🔒 [步骤 4] 检查面板登录状态...");
         try {
-            // 寻找真实的后台登录框
             const emailInput = targetPage.locator('input[name="user"], input[name="username"], input[type="email"]').filter({ state: 'visible' }).first();
             if (await emailInput.isVisible({ timeout: 10000 })) {
                 console.log(`🔑 [步骤 4] 发现登录界面，正在填入硬编码账号: ${MC_USERNAME}`);
@@ -94,17 +91,42 @@ async function autoSolveCaptcha(page) {
 
                 const loginBtn = targetPage.getByRole('button', { name: /LOGIN|登录|Sign In/i }).filter({ state: 'visible' }).first();
                 await loginBtn.click({ force: true });
-                console.log("⏳ [步骤 4] 账号密码已提交！等待进入控制台...");
+                console.log("⏳ [步骤 4] 账号密码已提交！进入智能驻留防卫模式...");
 
-                // 巡逻一下登录界面的验证码
-                const solvedAtLogin = await autoSolveCaptcha(targetPage);
-                if (solvedAtLogin) {
-                    try {
-                        const retryBtn = targetPage.getByRole('button', { name: /LOGIN|登录|Sign In/i }).filter({ state: 'visible' }).first();
-                        if (await retryBtn.isVisible({ timeout: 2000 })) await retryBtn.click({ force: true });
-                    } catch(e) {}
+                // ==========================================
+                // 🌟 核心升级：智能驻留巡逻，死盯延迟验证码
+                // ==========================================
+                let loginSuccess = false;
+                for (let i = 0; i < 15; i++) { // 最多等 30 秒
+                    // 只要 URL 离开了 auth/login，就说明登录进去了
+                    if (!targetPage.url().includes('auth/login')) {
+                        loginSuccess = true;
+                        console.log("✅ [步骤 4] 成功突破大门，进入后台！");
+                        break;
+                    }
+
+                    console.log(`  -> 正在侦测是否有延迟弹出的验证码... (扫描 ${i+1}/15)`);
+                    const solved = await autoSolveCaptcha(targetPage);
+                    
+                    if (solved) {
+                        // 破解完等 3 秒让绿勾生效
+                        await targetPage.waitForTimeout(3000);
+                        try {
+                            // 如果页面没自动跳，再点一次登录按钮
+                            if (await loginBtn.isVisible({ timeout: 1000 })) {
+                                await loginBtn.click({ force: true });
+                                console.log("  -> 补点登录按钮...");
+                            }
+                        } catch(e) {}
+                    }
+                    await targetPage.waitForTimeout(2000);
                 }
-                await targetPage.waitForLoadState('networkidle');
+                
+                if (!loginSuccess) {
+                     console.log("⚠️ [步骤 4] 30秒内未检测到 URL 跳转，尝试强行继续...");
+                }
+                // ==========================================
+
             } else {
                 console.log("✅ [步骤 4] 未发现登录框，已免密直达后台！");
             }
@@ -120,7 +142,6 @@ async function autoSolveCaptcha(page) {
         console.log("✅ [步骤 5] 已成功进入专属服务器详情页。");
 
         console.log("💻 [步骤 6] 点击上部导航栏的 Console...");
-        // 严格按照你的指示，匹配顶部导航条上的纯文本 Console 链接
         const topConsoleBtn = targetPage.locator('a').filter({ hasText: /^Console$/i }).first();
         await topConsoleBtn.waitFor({ state: 'visible', timeout: 10000 });
         await topConsoleBtn.click({ force: true });
