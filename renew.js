@@ -22,19 +22,29 @@ async function sendTelegramMessage(text) {
     }
 }
 
-// 增强版验证码侦测，扩大了 iframe 的匹配范围
+// 增强版验证码侦测，带插件注入检测
 async function autoSolveCaptcha(page) {
     try {
-        const challengeFrame = page.frameLocator('iframe[src*="bframe"], iframe[title*="recaptcha payload" i]').first();
-        const solverBtn = challengeFrame.locator('#solver-button');
+        // 定位 reCAPTCHA 的弹出层 iframe (bframe)
+        const challengeFrame = page.frameLocator('iframe[src*="api2/bframe"]').first();
         
-        if (await solverBtn.isVisible({ timeout: 2000 })) {
-            console.log("  [侦测] 🎧 发现 reCAPTCHA 验证码阻拦！正在呼叫 Buster...");
-            await solverBtn.click({ force: true });
-            console.log("  [侦测] ⏳ 已点击 Buster，等待 15 秒破解语音...");
-            await page.waitForTimeout(15000); 
-            console.log("  [侦测] ✅ Buster 破解动作执行完毕。");
-            return true;
+        // 检查九宫格区域是否可见
+        if (await challengeFrame.locator('.rc-imageselect-payload, #rc-imageselect').isVisible({ timeout: 2000 })) {
+            console.log("  [侦测] 🎧 发现 reCAPTCHA 验证码阻拦！");
+            
+            const solverBtn = challengeFrame.locator('#solver-button');
+            
+            // 给 Buster 插件最多 5 秒钟的注入时间
+            if (await solverBtn.isVisible({ timeout: 5000 })) {
+                console.log("  [侦测] 🤖 发现 Buster 插件小人图标！正在点击破解...");
+                await solverBtn.click({ force: true });
+                console.log("  [侦测] ⏳ 已启动 Buster，等待 15 秒破解语音...");
+                await page.waitForTimeout(15000); 
+                console.log("  [侦测] ✅ Buster 破解动作结束。");
+                return true;
+            } else {
+                console.log("  [侦测] ⚠️ 糟糕：弹出了验证码，但 Buster 插件图标未能成功注入！(被底层拦截)");
+            }
         }
     } catch (e) {}
     return false;
@@ -49,7 +59,7 @@ async function autoSolveCaptcha(page) {
     let targetPage;
 
     try {
-        console.log("🔥 [步骤 1] 正在点火启动浏览器 (启用新一代 --headless=new 原生模式)...");
+        console.log("🔥 [步骤 1] 正在点火启动浏览器 (加入强行解除跨域隔离参数)...");
         
         context = await chromium.launchPersistentContext('', {
             headless: false, 
@@ -58,6 +68,8 @@ async function autoSolveCaptcha(page) {
                 '--headless=new', 
                 `--disable-extensions-except=${busterPath}`,
                 `--load-extension=${busterPath}`,
+                '--disable-site-isolation-trials', // 🌟 关键修复：破除 iframe 跨域隔离
+                '--disable-features=IsolateOrigins,site-per-process', // 🌟 关键修复：彻底关掉进程隔离
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
                 '--disable-dev-shm-usage',
@@ -72,7 +84,7 @@ async function autoSolveCaptcha(page) {
         targetPage = page;
         console.log("✅ [步骤 2] 标签页创建成功！");
 
-        console.log("🌐 [步骤 3] 终极捷径：绕过前台广告，直达核心 Panel 面板...");
+        console.log("🌐 [步骤 3] 终极捷径：直达核心 Panel 面板...");
         await targetPage.goto('https://panel.gaming4free.net', { waitUntil: 'networkidle', timeout: 60000 });
 
         console.log("🔒 [步骤 4] 检查面板登录状态...");
@@ -93,26 +105,20 @@ async function autoSolveCaptcha(page) {
                 await loginBtn.click({ force: true });
                 console.log("⏳ [步骤 4] 账号密码已提交！进入智能驻留防卫模式...");
 
-                // ==========================================
-                // 🌟 核心升级：智能驻留巡逻，死盯延迟验证码
-                // ==========================================
                 let loginSuccess = false;
-                for (let i = 0; i < 15; i++) { // 最多等 30 秒
-                    // 只要 URL 离开了 auth/login，就说明登录进去了
+                for (let i = 0; i < 15; i++) { 
                     if (!targetPage.url().includes('auth/login')) {
                         loginSuccess = true;
                         console.log("✅ [步骤 4] 成功突破大门，进入后台！");
                         break;
                     }
 
-                    console.log(`  -> 正在侦测是否有延迟弹出的验证码... (扫描 ${i+1}/15)`);
+                    console.log(`  -> 正在扫视是否有验证码... (扫描 ${i+1}/15)`);
                     const solved = await autoSolveCaptcha(targetPage);
                     
                     if (solved) {
-                        // 破解完等 3 秒让绿勾生效
                         await targetPage.waitForTimeout(3000);
                         try {
-                            // 如果页面没自动跳，再点一次登录按钮
                             if (await loginBtn.isVisible({ timeout: 1000 })) {
                                 await loginBtn.click({ force: true });
                                 console.log("  -> 补点登录按钮...");
@@ -125,7 +131,6 @@ async function autoSolveCaptcha(page) {
                 if (!loginSuccess) {
                      console.log("⚠️ [步骤 4] 30秒内未检测到 URL 跳转，尝试强行继续...");
                 }
-                // ==========================================
 
             } else {
                 console.log("✅ [步骤 4] 未发现登录框，已免密直达后台！");
