@@ -33,11 +33,15 @@ jobs:
         with:
           node-version: 20
 
-      - name: 创建WARP网络
-        uses: fscarmen/warp-on-actions@v1.3
-        with:
-          stack: dual
-          mode: client
+      # 👇 ========================
+      # 暂时关闭 WARP，测试 GitHub 原生 IP
+      # ========================
+      # - name: 创建WARP网络
+      #   uses: fscarmen/warp-on-actions@v1.3
+      #   with:
+      #     stack: dual
+      #     mode: client
+      # 👆 ========================
 
       # 🟡 系统依赖与虚拟音频
       - name: Install deps
