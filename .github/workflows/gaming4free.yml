@@ -73,12 +73,12 @@ jobs:
       - name: Run script
         env:
           MC_USERNAME: ${{ secrets.MC_USERNAME }}
-          MC_PASSWORD: ${{ secrets.MC_PASSWORD }} # 新增这行！
+          MC_PASSWORD: ${{ secrets.MC_PASSWORD }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
         run: |
-          mkdir -p scripts/screenshots
-          xvfb-run -a node scripts/renew.js
+          mkdir -p screenshots
+          xvfb-run -a node renew.js
 
       - name: Upload screenshots
         uses: actions/upload-artifact@v4
