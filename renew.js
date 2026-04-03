@@ -49,17 +49,16 @@ async function autoSolveCaptcha(page) {
         console.log("🔥 [步骤 1] 正在点火启动浏览器 (启用新一代 --headless=new 原生模式)...");
         
         context = await chromium.launchPersistentContext('', {
-            // 这里必须设为 false 骗过 Playwright 的老旧判定
             headless: false, 
             timeout: 120000, 
             args: [
-                '--headless=new', // 🌟 终极魔法：让 Chrome 自动处理无头模式，完美兼容插件且不卡死！
+                '--headless=new', 
                 `--disable-extensions-except=${busterPath}`,
                 `--load-extension=${busterPath}`,
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
                 '--disable-dev-shm-usage',
-                '--disable-gpu' // 在新无头模式下，禁用 GPU 是非常安全的
+                '--disable-gpu' 
             ],
             ignoreDefaultArgs: ["--mute-audio"],
         });
@@ -75,8 +74,9 @@ async function autoSolveCaptcha(page) {
         console.log("✅ [步骤 3] 页面加载完成。");
 
         console.log("🔑 [步骤 4] 正在输入前台账号密码...");
-        await targetPage.locator('input[type="email"]').fill(MC_USERNAME);
-        await targetPage.locator('input[type="password"]').fill(MC_PASSWORD);
+        // 前台同样加上可见性过滤，防患未然
+        await targetPage.locator('input[type="email"]').filter({ state: 'visible' }).first().fill(MC_USERNAME);
+        await targetPage.locator('input[type="password"]').filter({ state: 'visible' }).first().fill(MC_PASSWORD);
         await targetPage.getByRole('button', { name: 'Sign In' }).click();
         
         await targetPage.waitForURL('**/dashboard**', { timeout: 30000 }).catch(() => {});
@@ -100,22 +100,35 @@ async function autoSolveCaptcha(page) {
         const newPage = await panelPromise;
         if (newPage) {
             targetPage = newPage;
-            await targetPage.waitForLoadState('domcontentloaded');
+            // 多等一会儿，确保后台的 React/Vue 页面完全渲染出来
+            await targetPage.waitForLoadState('networkidle');
             console.log("✅ [步骤 6] 已成功切换至后台新标签页。");
         }
 
-        console.log("🔒 [步骤 7] 执行后台二次登录...");
-        await targetPage.locator('input[type="email"], input[name="username"]').fill(MC_USERNAME);
-        await targetPage.locator('input[type="password"]').fill(MC_PASSWORD);
-        await targetPage.getByRole('button', { name: /LOGIN|登录/i }).click();
+        // =====================================
+        // 🌟 本次修复核心：防诱捕逻辑
+        // =====================================
+        console.log("🔒 [步骤 7] 执行后台二次登录 (已开启防陷阱识别)...");
+        
+        // 过滤掉所有被隐藏的输入框，只找屏幕上肉眼可见的那个
+        const emailInput = targetPage.locator('input[name="user"], input[name="username"], input[type="email"], input[type="text"]').filter({ state: 'visible' }).first();
+        await emailInput.waitFor({ state: 'visible', timeout: 15000 });
+        await emailInput.fill(MC_USERNAME);
+
+        const pwdInput = targetPage.locator('input[type="password"]').filter({ state: 'visible' }).first();
+        await pwdInput.fill(MC_PASSWORD);
+
+        const loginBtn = targetPage.getByRole('button', { name: /LOGIN|登录|Sign In/i }).filter({ state: 'visible' }).first();
+        await loginBtn.click({ force: true });
+        console.log("✅ [步骤 7] 账号密码已提交！");
 
         console.log("🤖 [步骤 8] 检查后台登录时是否弹出验证码...");
         const solvedAtLogin = await autoSolveCaptcha(targetPage);
         if (solvedAtLogin) {
             try {
-                const loginBtn = targetPage.getByRole('button', { name: /LOGIN|登录/i });
-                if (await loginBtn.isVisible({ timeout: 2000 })) {
-                    await loginBtn.click({ force: true });
+                const loginBtnRetry = targetPage.getByRole('button', { name: /LOGIN|登录|Sign In/i }).filter({ state: 'visible' }).first();
+                if (await loginBtnRetry.isVisible({ timeout: 2000 })) {
+                    await loginBtnRetry.click({ force: true });
                     console.log("✅ [步骤 8] 破解后已补点登录按钮。");
                 }
             } catch(e) {}
