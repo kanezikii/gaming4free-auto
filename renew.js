@@ -25,37 +25,45 @@ async function sendTelegramMessage(text) {
     }
 }
 
+// 🌟 终极验证码克星：直接瞄准按钮，放弃依赖不稳定的九宫格 class
 async function autoSolveCaptcha(page) {
     try {
-        const challengeFrame = page.frameLocator('iframe[src*="api2/bframe"]').first();
+        const bframe = page.frameLocator('iframe[src*="bframe"]').first();
         
-        if (await challengeFrame.locator('.rc-imageselect-payload, #rc-imageselect').isVisible({ timeout: 2000 })) {
-            console.log("  [侦测] 🎧 发现 reCAPTCHA 验证码阻拦！");
+        // 直接去找我们要点的按钮，如果它们可见，说明验证码弹窗就在脸上！
+        const solverBtn = bframe.locator('#solver-button');
+        const audioBtn = bframe.locator('#recaptcha-audio-button');
+        
+        if (await solverBtn.isVisible({ timeout: 1500 }) || await audioBtn.isVisible({ timeout: 1500 })) {
+            console.log("  [侦测] 🎧 发现 reCAPTCHA 验证码弹窗！");
             
-            let solverBtn = challengeFrame.locator('#solver-button');
-            
-            // 如果没看到小黄人图标，强行点击“耳机”图标切换到语音模式
-            if (!(await solverBtn.isVisible({ timeout: 2000 }))) {
-                console.log("  [侦测] ⚠️ 首屏未见 Buster 图标，尝试点击耳机切入语音模式...");
-                const audioBtn = challengeFrame.locator('#recaptcha-audio-button');
-                if (await audioBtn.isVisible({ timeout: 2000 })) {
-                    await audioBtn.click({ force: true });
-                    await page.waitForTimeout(1500); 
-                }
-            }
-
-            if (await solverBtn.isVisible({ timeout: 3000 })) {
-                console.log("  [侦测] 🤖 成功锁定 Buster 小黄人图标！正在点击破解...");
+            if (await solverBtn.isVisible({ timeout: 1000 })) {
+                console.log("  [侦测] 🤖 成功锁定 Buster 小黄人图标！正在强行点击破解...");
                 await solverBtn.click({ force: true });
-                console.log("  [侦测] ⏳ 已启动 Buster，等待最多 15 秒聆听并破解语音...");
+                console.log("  [侦测] ⏳ 已启动 Buster，等待 15 秒聆听并破解语音...");
                 await page.waitForTimeout(15000); 
                 console.log("  [侦测] ✅ Buster 破解动作执行完毕。");
                 return true;
-            } else {
-                console.log("  [侦测] 🚨 致命异常：已经切入语音模式，但 Buster 插件仍未出现！(可能环境修复失败)");
+            } else if (await audioBtn.isVisible({ timeout: 1000 })) {
+                console.log("  [侦测] ⚠️ 首屏未见 Buster，强行点击耳机切入语音模式！");
+                await audioBtn.click({ force: true });
+                await page.waitForTimeout(1500); 
+                
+                if (await solverBtn.isVisible({ timeout: 2000 })) {
+                    console.log("  [侦测] 🤖 成功锁定 Buster 小黄人图标！正在点击破解...");
+                    await solverBtn.click({ force: true });
+                    console.log("  [侦测] ⏳ 已启动 Buster，等待 15 秒聆听并破解语音...");
+                    await page.waitForTimeout(15000); 
+                    console.log("  [侦测] ✅ Buster 破解动作执行完毕。");
+                    return true;
+                } else {
+                    console.log("  [侦测] 🚨 致命异常：切入语音模式后 Buster 仍未加载！");
+                }
             }
         }
-    } catch (e) {}
+    } catch (e) {
+        // 忽略静默错误
+    }
     return false;
 }
 
@@ -63,22 +71,15 @@ async function autoSolveCaptcha(page) {
     console.log("==========================================");
     console.log("🚀 [步骤 0] 脚本启动，执行环境自检与强力自动修复...");
     
-    // =====================================
-    // 🌟 核心升级 3.0：动态获取 GitHub Release
-    // =====================================
     const busterPath = path.join(os.tmpdir(), 'buster-extension');
     if (!fs.existsSync(path.join(busterPath, 'manifest.json'))) {
         console.log("📥 [环境修复] 正在通过 GitHub API 动态追踪最新版 Buster 插件...");
         try {
             fs.mkdirSync(busterPath, { recursive: true });
-            
-            // 动态调用 API 查询最新的真实下载地址，防止写死的链接 404
             const releaseJson = execSync('curl -sL https://api.github.com/repos/dessant/buster/releases/latest').toString();
             const releaseData = JSON.parse(releaseJson);
             const chromeAsset = releaseData.assets.find(a => a.name.toLowerCase().includes('chrome') && a.name.endsWith('.zip'));
-            
-            let downloadUrl = chromeAsset ? chromeAsset.browser_download_url : 'https://github.com/dessant/buster/releases/download/v2.0.1/buster-v2.0.1-chrome.zip';
-            console.log(`🔗 成功获取真实下载链接: ${downloadUrl}`);
+            let downloadUrl = chromeAsset ? chromeAsset.browser_download_url : 'https://github.com/dessant/buster/releases/download/v2.0.1/buster-extension-2.0.1-chrome.zip';
             
             execSync(`curl -L -o /tmp/buster.zip "${downloadUrl}"`, { stdio: 'inherit' });
             execSync(`unzip -o /tmp/buster.zip -d ${busterPath}`, { stdio: 'inherit' });
@@ -89,7 +90,6 @@ async function autoSolveCaptcha(page) {
     } else {
         console.log(`✅ [环境检查] 找到本地已存在的完整 Buster 插件: ${busterPath}`);
     }
-    // =====================================
 
     let context;
     let targetPage;
@@ -142,14 +142,14 @@ async function autoSolveCaptcha(page) {
                 console.log("⏳ [步骤 4] 账号密码已提交！进入最高警戒：盯防验证码...");
 
                 let loginSuccess = false;
-                for (let i = 0; i < 15; i++) { 
+                for (let i = 0; i < 20; i++) { // 给足 40 秒的容错时间
                     if (!targetPage.url().includes('auth/login')) {
                         loginSuccess = true;
                         console.log("🎉 [步骤 4] 验证通过！成功突破大门进入后台！");
                         break;
                     }
 
-                    console.log(`  -> 正在扫视是否有验证码... (扫描 ${i+1}/15)`);
+                    console.log(`  -> 正在扫视是否有验证码... (扫描 ${i+1}/20)`);
                     const solved = await autoSolveCaptcha(targetPage);
                     
                     if (solved) {
@@ -165,7 +165,7 @@ async function autoSolveCaptcha(page) {
                 }
                 
                 if (!loginSuccess) {
-                     throw new Error("🚨 登录被拦截！30秒内未能成功进入后台，可能是验证码破解失败或账号密码错误！");
+                     throw new Error("🚨 登录被拦截！40秒内未能成功进入后台，可能是验证码破解失败或账号密码错误！");
                 }
 
             } else {
@@ -218,37 +218,3 @@ async function autoSolveCaptcha(page) {
                 const waitBtn = targetPage.getByRole('button', { name: /PLEASE WAIT/i });
                 if (await waitBtn.isVisible({ timeout: 1000 })) {
                     success = true;
-                    console.log("🎉🎉 [步骤 8] 破阵成功！已进入 PLEASE WAIT 续期等待状态！");
-                    break;
-                }
-            } catch (e) {}
-        }
-
-        if (!success) {
-            throw new Error("🚨 [致命错误] 5分钟已耗尽，未能领到时间。");
-        }
-
-        console.log("==========================================");
-        console.log("🎉 全流程完美收官！发送电报通知...");
-        await sendTelegramMessage(`🎮 Gaming4Free 续期成功！\n账号: ${MC_USERNAME}`);
-
-    } catch (error) {
-        console.log("==========================================");
-        console.error("❌ 发生崩溃异常:", error.message);
-        
-        if (targetPage) {
-            try {
-                console.log("📸 正在对案发现场进行拍照取证...");
-                const screenshotPath = path.join(__dirname, 'screenshots', `error-${Date.now()}.png`);
-                await targetPage.screenshot({ path: screenshotPath });
-                console.log("✅ 取证完毕，截图已保存。");
-            } catch (e) {}
-        }
-        
-        await sendTelegramMessage(`⚠️ 续期脚本崩溃！\n账号: ${MC_USERNAME}\n报错: ${error.message.substring(0, 100)}...`);
-        process.exit(1);
-    } finally {
-        if (context) await context.close();
-        console.log("🛑 脚本进程强制结束。");
-    }
-})();
