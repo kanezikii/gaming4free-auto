@@ -1,13 +1,11 @@
 const { chromium } = require('playwright');
 const path = require('path');
 
-// 从 GitHub Actions 提取环境变量
 const MC_USERNAME = process.env.MC_USERNAME;
 const MC_PASSWORD = process.env.MC_PASSWORD; 
 const TG_BOT_TOKEN = process.env.TG_BOT_TOKEN;
 const TG_CHAT_ID = process.env.TG_CHAT_ID;
 
-// 发送 TG 通知的方法
 async function sendTelegramMessage(text) {
     if (!TG_BOT_TOKEN || !TG_CHAT_ID) return;
     const url = `https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage`;
@@ -27,18 +25,18 @@ async function sendTelegramMessage(text) {
     const busterPath = path.join(__dirname, 'extensions', 'buster', 'unpacked');
 
     const context = await chromium.launchPersistentContext('', {
-        headless: false, // 必须为 false 才能加载 Buster 插件
+        headless: false,
         args: [
             `--disable-extensions-except=${busterPath}`,
             `--load-extension=${busterPath}`,
             '--no-sandbox',
             '--disable-setuid-sandbox'
         ],
-        ignoreDefaultArgs: ["--mute-audio"], // 允许播放声音，防验证码拦截
+        ignoreDefaultArgs: ["--mute-audio"],
     });
 
     const page = await context.newPage();
-    let targetPage = page; // 用于跟踪当前处于焦点的页面
+    let targetPage = page;
 
     try {
         console.log("🌐 访问登录页...");
@@ -50,18 +48,28 @@ async function sendTelegramMessage(text) {
         await targetPage.locator('input[type="password"]').fill(MC_PASSWORD);
         await targetPage.getByRole('button', { name: 'Sign In' }).click();
 
-        // 等待登录成功并进入 Dashboard
         await targetPage.waitForURL('**/dashboard**', { timeout: 20000 })
             .catch(() => console.log("未检测到标准 URL 跳转，继续尝试..."));
         await targetPage.waitForLoadState('networkidle');
 
+        // 处理新手引导弹窗
+        console.log("🔍 检查是否有新手引导弹窗...");
+        try {
+            const skipBtn = targetPage.getByText('Skip', { exact: true });
+            await skipBtn.waitFor({ state: 'visible', timeout: 5000 });
+            await skipBtn.click();
+            console.log("👀 发现新手引导，已点击 Skip 跳过。");
+            await targetPage.waitForTimeout(1000); 
+        } catch (error) {
+            console.log("✅ 5秒内未检测到弹窗，继续执行。");
+        }
+
         // 2. 点击 Panel (外部跳转图标)
         console.log("🎛️ 准备进入服务器后台 Panel...");
-        // 查找包含 target="_blank" 的 a 标签（通常是这种面板右下角的跳转图标）
         const panelPromise = context.waitForEvent('page').catch(() => null);
-        await targetPage.locator('a[target="_blank"]').last().click();
         
-        // 如果点击后新开了一个标签页，就把控制权交给新标签页
+        await targetPage.locator('a[target="_blank"]').last().click({ force: true });
+        
         const newPage = await panelPromise;
         if (newPage) {
             targetPage = newPage;
@@ -70,7 +78,6 @@ async function sendTelegramMessage(text) {
 
         // 3. 点击 Console
         console.log("💻 正在进入 Console 面板...");
-        // 根据截图4，顶部导航包含 Console
         await targetPage.getByText('Console', { exact: true }).click();
         await targetPage.waitForLoadState('networkidle');
 
@@ -78,26 +85,57 @@ async function sendTelegramMessage(text) {
         console.log("⏳ 正在寻找并点击 ADD 90 MINUTES...");
         const addTimeBtn = targetPage.getByRole('button', { name: /ADD 90 MINUTES/i });
         await addTimeBtn.waitFor({ state: 'visible', timeout: 15000 });
-        await addTimeBtn.click();
+        await addTimeBtn.click({ force: true });
 
-        // 5. 等待广告读秒结束
-        console.log("📺 广告时间... 正在等待状态变更为 PLEASE WAIT...");
-        // 设一个 5 分钟的超长等待，确保广告能播完
-        const waitBtn = targetPage.getByRole('button', { name: /PLEASE WAIT/i });
-        await waitBtn.waitFor({ state: 'visible', timeout: 20 });
+        // ==========================================
+        // 🌟 核心升级：激进的广告等待与弹窗清理策略
+        // ==========================================
+        console.log("📺 进入广告/跳转处理阶段，最长等待 5 分钟...");
+        let success = false;
+        
+        for (let i = 0; i < 60; i++) {
+            await targetPage.waitForTimeout(5000); // 每次等 5 秒
+            
+            // 招式一：无脑按 ESC 键（可以直接关掉 90% 的网页居中弹窗，包括截图里那个）
+            await targetPage.keyboard.press('Escape').catch(() => {});
+            
+            // 招式二：尝试寻找并点击各种常见的关闭按钮图标 (X)
+            try {
+                // 模糊匹配包含 close 的按钮或 SVG 图标
+                const closeBtn = targetPage.locator('button[aria-label*="lose" i], [class*="close" i], svg.lucide-x').first();
+                if (await closeBtn.isVisible({ timeout: 500 })) {
+                    await closeBtn.click({ force: true });
+                    console.log("💥 检测到阻碍跳转的广告弹窗，已强行关闭！");
+                }
+            } catch (e) {}
 
-        console.log("✅ 续期成功！");
+            // 招式三：检查是否已经跳回了控制台并且出现了 PLEASE WAIT
+            try {
+                const waitBtn = targetPage.getByRole('button', { name: /PLEASE WAIT/i });
+                if (await waitBtn.isVisible({ timeout: 1000 })) {
+                    success = true;
+                    console.log("✅ 成功回到控制台，已进入 PLEASE WAIT 续期等待状态！");
+                    break;
+                }
+            } catch (e) {}
+        }
+
+        if (!success) {
+            throw new Error("🚨 等待广告结束超时！可能是广告页面卡死，未能跳回控制台。");
+        }
+        // ==========================================
+
+        console.log("🎉 续期成功！");
         await sendTelegramMessage(`🎮 Gaming4Free 续期成功！\n账号: ${MC_USERNAME}`);
 
     } catch (error) {
         console.error("❌ 发生错误:", error);
         
-        // 截图留证
         const screenshotPath = path.join(__dirname, 'screenshots', `error-${Date.now()}.png`);
         await targetPage.screenshot({ path: screenshotPath });
         
-        await sendTelegramMessage(`⚠️ 续期脚本崩溃！\n账号: ${MC_USERNAME}\n详见 Actions 截图日志。\n报错: ${error.message.substring(0, 100)}...`);
-        process.exit(1); // 抛出异常，让 GitHub Actions 标记为失败 (红叉)
+        await sendTelegramMessage(`⚠️ 续期脚本崩溃！\n账号: ${MC_USERNAME}\n报错: ${error.message.substring(0, 100)}...`);
+        process.exit(1);
         
     } finally {
         await context.close();
