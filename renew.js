@@ -105,7 +105,7 @@ async function autoSolveCaptcha(page) {
         context = await chromium.launchPersistentContext('', {
             headless: false, 
             timeout: 120000, 
-            proxy: { server: 'socks5://127.0.0.1:10808' }, // 🌟 挂载私有节点
+            proxy: { server: 'socks5://127.0.0.1:10808' }, 
             args: [
                 '--headless=new', 
                 `--disable-extensions-except=${busterPath}`,
@@ -185,7 +185,6 @@ async function autoSolveCaptcha(page) {
         }
 
         console.log("🖥️ [步骤 5] 正在精准定位并点击你的 renqi 服务...");
-        // 🌟 终极修复：直接找页面上肉眼可见的 'My renqi' 文本元素，避开所有隐藏的大框架！
         const serverCard = targetPage.getByText('My renqi', { exact: false }).filter({ state: 'visible' }).first();
         await serverCard.waitFor({ state: 'visible', timeout: 20000 });
         await serverCard.click({ force: true });
@@ -238,7 +237,19 @@ async function autoSolveCaptcha(page) {
         }
 
         console.log("==========================================");
-        console.log("🎉 全流程完美收官！发送电报通知...");
+        console.log("🎉 全流程完美收官！正在截取最新的冷却时间与剩余时间...");
+        
+        // ==========================================
+        // 🌟 新增的成功状态截图代码
+        // ==========================================
+        await targetPage.waitForTimeout(3000); // 稍微多等3秒，确保网页UI把剩余时间和 PLEASE WAIT 按钮完全加载出来
+        const successPicPath = path.join(__dirname, 'screenshots', `success_renew_${Date.now()}.png`);
+        
+        // 开启 fullPage 确保截取到屏幕下方的所有有效信息
+        await targetPage.screenshot({ path: successPicPath, fullPage: true }); 
+        console.log(`📸 成功状态截图已保存至: ${successPicPath} (可前往 GitHub Actions 页面下载查看)`);
+        // ==========================================
+
         await sendTelegramMessage(`🎮 Gaming4Free 续期成功！\n账号: ${MC_USERNAME}`);
 
     } catch (error) {
