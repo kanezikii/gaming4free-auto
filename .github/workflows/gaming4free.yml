@@ -1,26 +1,23 @@
-name: gaming4free renew (WARP + Buster)
+name: gaming4free renew (Mac Clean IP)
 
 on:
   workflow_dispatch:
   schedule:
     - cron: "0 */12 * * *"
 
-# ========================
-# 补上这部分权限声明！
 permissions:
-  actions: write   # 允许工作流清理旧的运行日志
-  contents: read   # 允许拉取代码
-# ========================
+  actions: write
+  contents: read
 
 jobs:
   run:
-    runs-on: ubuntu-22.04
+    # 🌟 终极绝杀：把系统换成 macos-13，获取极高信誉度的干净 IP 池！
+    runs-on: macos-13
     timeout-minutes: 15
 
     steps:
       - uses: actions/checkout@v4
 
-      # 🟡 私有仓库提取 (路径精简为 scripts)
       - name: Checkout private repo
         uses: actions/checkout@v4
         with:
@@ -33,48 +30,18 @@ jobs:
         with:
           node-version: 20
 
-      # 👇 ========================
-      # 暂时关闭 WARP，测试 GitHub 原生 IP
-      # ========================
-      # - name: 创建WARP网络
-      #   uses: fscarmen/warp-on-actions@v1.3
-      #   with:
-      #     stack: dual
-      #     mode: client
-      # 👆 ========================
-
-      # 🟡 系统依赖与虚拟音频
-      - name: Install deps
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y xvfb wget unzip curl jq p7zip-full pulseaudio alsa-utils ffmpeg
-          pulseaudio --start --exit-idle-time=-1 || true
-          pactl load-module module-null-sink sink_name=virtual_speaker || true
-          pactl set-default-sink virtual_speaker || true
-          pactl load-module module-virtual-source source_name=virtual_mic || true
-          pactl set-default-source virtual_mic || true
-
-      # 🟡 补回 --with-deps
+      # Mac 原生自带绝大多数依赖，不需要装 xvfb 这种 Linux 虚拟显示器了
       - name: Install playwright
         run: |
           npm init -y
-          npm install playwright
-          npm install playwright-extra puppeteer-extra-plugin-stealth # 🌟 新增这行！
+          npm install playwright playwright-extra puppeteer-extra-plugin-stealth
           npx playwright install chromium --with-deps
-
-      - name: Download and Unzip Buster
-        run: |
-          mkdir -p scripts/extensions/buster
-          wget -O scripts/extensions/buster/buster.zip https://github.com/dessant/buster/releases/download/v3.1.0/buster_captcha_solver_for_humans-3.1.0-chrome.zip
-          mkdir -p scripts/extensions/buster/unpacked
-          7z x -y scripts/extensions/buster/buster.zip -oscripts/extensions/buster/unpacked
 
       - name: Check IP
         run: |
           curl -s https://api.ipify.org && echo
           curl -s https://ipinfo.io
 
-      # 🟡 补回环境变量注入
       - name: Run script
         env:
           MC_USERNAME: ${{ secrets.MC_USERNAME }}
@@ -83,18 +50,18 @@ jobs:
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
         run: |
           mkdir -p screenshots
-          xvfb-run -a node renew.js
+          # Mac 下直接运行即可，无需 xvfb-run
+          node renew.js
 
       - name: Upload screenshots
         uses: actions/upload-artifact@v4
         if: always()
         with:
           name: screenshots
-          path: screenshots/** # ⚠️ 注意这里！把前面的 scripts/ 删掉！
+          path: screenshots/**
           retention-days: 1
           if-no-files-found: warn
 
-      # 🟡 保留第一版的日志清理功能
       - name: Delete old workflow runs
         uses: Mattraks/delete-workflow-runs@v2
         if: always()
