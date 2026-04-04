@@ -3,7 +3,8 @@ name: gaming4free renew (Free Proxy + Buster)
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 */12 * * *"
+    # 🌟 修改为每小时运行一次
+    - cron: "0 * * * *"
 
 permissions:
   actions: write
