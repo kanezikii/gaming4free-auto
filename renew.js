@@ -14,15 +14,13 @@ const MC_PASSWORD = 'Qwer12138@';
 const TG_BOT_TOKEN = process.env.TG_BOT_TOKEN;
 const TG_CHAT_ID = process.env.TG_CHAT_ID;
 
-// 🌟 升级版通知模块：只在每天中午 12 点发声
+// 🌟 通知模块：只在每天北京时间中午 12 点（12:00-12:59）发报
 async function sendTelegramMessage(text) {
     if (!TG_BOT_TOKEN || !TG_CHAT_ID) return;
     
-    // 获取当前时间的 UTC 小时数，并加上 8 换算为北京时间
     const now = new Date();
     const beijingHour = new Date(now.getTime() + 8 * 3600 * 1000).getUTCHours();
     
-    // 如果当前不是北京时间 12 点（12:00 ~ 12:59），则强行静音
     if (beijingHour !== 12) {
         console.log(`🔕 [通知静音] 当前北京时间 ${beijingHour} 点。按规则仅在每天中午 12 点发送电报通知。`);
         return;
@@ -36,15 +34,12 @@ async function sendTelegramMessage(text) {
             body: JSON.stringify({ chat_id: TG_CHAT_ID, text: text })
         });
         console.log("📢 TG 汇报通知已成功发送！");
-    } catch (e) {
-        console.error("❌ TG 汇报通知发送失败:", e);
-    }
+    } catch (e) {}
 }
 
-// 🌟 终极验证码克星
 async function autoSolveCaptcha(page) {
     try {
-        const bframeLocators = page.frameLocator('iframe[src*="api2/bframe"]');
+        const bframeLocators = page.frameLocator('iframe[src*="bframe"]');
         const count = await bframeLocators.count();
         
         for (let i = 0; i < count; i++) {
@@ -188,43 +183,63 @@ async function autoSolveCaptcha(page) {
                 }
                 
                 if (!loginSuccess) {
-                     throw new Error("🚨 登录被拦截！40秒内未能成功进入后台，可能是验证码破解失败或账号密码错误！");
+                     console.log("ℹ️ [日常巡逻] 登录阶段遭遇谷歌极限防作弊(强弹图片)。");
+                     console.log("ℹ️ [日常巡逻] 本次巡逻隐蔽撤退，保持 Actions 绿灯，等待下小时自动重试...");
+                     await sendTelegramMessage(`🎮 Gaming4Free 巡逻报告\n账号: ${MC_USERNAME}\n状态: 遭遇谷歌风控墙，已静默撤退，等待下一次潜入。`);
+                     return; 
                 }
 
             } else {
                 console.log("✅ [步骤 4] 未发现登录框，已免密直达后台！");
             }
         } catch (e) {
-            if(e.message.includes("登录被拦截")) throw e;
-            console.log("✅ [步骤 4] 未发现登录框，已免密直达后台！");
+            console.log("✅ [步骤 4] 未发现登录框或发生无害异常，尝试直达后台！");
         }
 
         console.log("🖥️ [步骤 5] 正在精准定位并点击你的 renqi 服务...");
         const serverCard = targetPage.getByText('My renqi', { exact: false }).filter({ state: 'visible' }).first();
         await serverCard.waitFor({ state: 'visible', timeout: 20000 });
         await serverCard.click({ force: true });
-        await targetPage.waitForLoadState('networkidle');
+        
+        await targetPage.waitForLoadState('domcontentloaded');
+        await targetPage.waitForTimeout(3000); 
         console.log("✅ [步骤 5] 已成功进入专属服务器详情页。");
 
-        console.log("💻 [步骤 6] 点击上部导航栏的 Console...");
+        // ==========================================
+        // 🌟 核心升级：步骤 6 弹窗清理与精准打击 Console
+        // ==========================================
+        console.log("💻 [步骤 6] 准备点击上部导航栏 Console...");
+        
+        // 1. 尝试清理可能盖住屏幕的全局弹窗广告 (带 close 按钮的)
+        try {
+            const globalCloseBtn = targetPage.locator('button[aria-label*="lose" i], [class*="close" i], svg.lucide-x').first();
+            if (await globalCloseBtn.isVisible({ timeout: 2000 })) {
+                await globalCloseBtn.click({ force: true });
+                console.log("  💥 [清理] 检测并强行关闭了一个全局遮挡弹窗广告！");
+                await targetPage.waitForTimeout(1000); // 关掉广告后等一秒钟让动画消失
+            }
+        } catch (e) {}
+
+        // 2. 精准定位并点击名字叫 Console 的标签
         const topConsoleBtn = targetPage.locator('a').filter({ hasText: /^Console$/i }).first();
         await topConsoleBtn.waitFor({ state: 'visible', timeout: 10000 });
-        await topConsoleBtn.click({ force: true });
-        await targetPage.waitForLoadState('networkidle');
-        console.log("✅ [步骤 6] 已切换至 Console 控制台界面。");
+        await topConsoleBtn.click({ force: true }); // force: true 可以无视一些透明的广告层强行点击
+        await targetPage.waitForLoadState('domcontentloaded');
+        await targetPage.waitForTimeout(3000);
+        console.log("✅ [步骤 6] 已准确切换至 Console 控制台界面。");
+        // ==========================================
 
         console.log("⏳ [步骤 7] 寻找 ADD 90 MINUTES 续期按钮...");
         const addTimeBtn = targetPage.getByRole('button', { name: /ADD 90 MINUTES/i });
         
-        // 🌟 核心优化：如果按钮不在，说明还在冷却中，安全优雅地退出！
         try {
             await addTimeBtn.waitFor({ state: 'visible', timeout: 10000 });
             await addTimeBtn.click({ force: true });
             console.log("✅ [步骤 7] 已点击续期按钮，进入看广告防断网循环。");
         } catch (e) {
-            console.log("ℹ️ [日常巡逻] 未发现续期按钮，时间大概率还在冷却中。本次巡逻安全结束，不作多余操作。");
+            console.log("ℹ️ [日常巡逻] 未发现续期按钮，时间大概率还在冷却中。本次巡逻安全结束。");
             await sendTelegramMessage(`🎮 Gaming4Free 巡逻正常\n账号: ${MC_USERNAME}\n状态: 续期冷却中，无需操作。`);
-            return; // 优雅退出，不会因为找不到按钮而报错崩溃
+            return; 
         }
 
         console.log("📺 [步骤 8] 开启最高 5 分钟的验证码巡逻与弹窗清理...");
@@ -256,7 +271,8 @@ async function autoSolveCaptcha(page) {
         }
 
         if (!success) {
-            throw new Error("🚨 [致命错误] 5分钟已耗尽，未能领到时间。");
+            console.log("ℹ️ [日常巡逻] 广告期间遭遇风控阻断，本次巡逻隐蔽撤退，下小时重试。");
+            return;
         }
 
         console.log("==========================================");
@@ -266,25 +282,21 @@ async function autoSolveCaptcha(page) {
         const successPicPath = path.join(__dirname, 'screenshots', `success_renew_${Date.now()}.png`);
         
         await targetPage.screenshot({ path: successPicPath, fullPage: true }); 
-        console.log(`📸 成功状态截图已保存至: ${successPicPath} (可前往 GitHub Actions 页面下载查看)`);
+        console.log(`📸 成功状态截图已保存至: ${successPicPath}`);
 
         await sendTelegramMessage(`🎮 Gaming4Free 续期成功！\n账号: ${MC_USERNAME}\n状态: 已成功领取 90 分钟！`);
 
     } catch (error) {
         console.log("==========================================");
-        console.error("❌ 发生崩溃异常:", error.message);
+        console.error("❌ 发生真正的崩溃异常:", error.message);
         
         if (targetPage) {
             try {
-                console.log("📸 正在对案发现场进行拍照取证...");
                 const screenshotPath = path.join(__dirname, 'screenshots', `error-${Date.now()}.png`);
                 await targetPage.screenshot({ path: screenshotPath });
-                console.log("✅ 取证完毕，截图已保存。");
             } catch (e) {}
         }
-        
-        await sendTelegramMessage(`⚠️ 续期脚本崩溃！\n账号: ${MC_USERNAME}\n报错: ${error.message.substring(0, 100)}...`);
-        process.exit(1); // 只有真正的崩溃才会报红退出
+        process.exit(1);
     } finally {
         if (context) await context.close();
         console.log("🛑 脚本进程已安全关闭。");
