@@ -184,6 +184,12 @@ async function autoSolveCaptcha(page) {
                 
                 if (!loginSuccess) {
                      console.log("ℹ️ [日常巡逻] 登录阶段遭遇谷歌极限防作弊(强弹图片)。");
+                     
+                     // 🌟 补丁：撤退前拍照
+                     const retreatPicPath = path.join(__dirname, 'screenshots', `retreat_login_${Date.now()}.png`);
+                     await targetPage.screenshot({ path: retreatPicPath, fullPage: true }).catch(()=>{});
+                     console.log(`📸 撤退前已拍下案发现场留档: ${retreatPicPath}`);
+
                      console.log("ℹ️ [日常巡逻] 本次巡逻隐蔽撤退，保持 Actions 绿灯，等待下小时自动重试...");
                      await sendTelegramMessage(`🎮 Gaming4Free 巡逻报告\n账号: ${MC_USERNAME}\n状态: 遭遇谷歌风控墙，已静默撤退，等待下一次潜入。`);
                      return; 
@@ -205,29 +211,22 @@ async function autoSolveCaptcha(page) {
         await targetPage.waitForTimeout(3000); 
         console.log("✅ [步骤 5] 已成功进入专属服务器详情页。");
 
-        // ==========================================
-        // 🌟 核心升级：步骤 6 弹窗清理与精准打击 Console
-        // ==========================================
         console.log("💻 [步骤 6] 准备点击上部导航栏 Console...");
-        
-        // 1. 尝试清理可能盖住屏幕的全局弹窗广告 (带 close 按钮的)
         try {
             const globalCloseBtn = targetPage.locator('button[aria-label*="lose" i], [class*="close" i], svg.lucide-x').first();
             if (await globalCloseBtn.isVisible({ timeout: 2000 })) {
                 await globalCloseBtn.click({ force: true });
                 console.log("  💥 [清理] 检测并强行关闭了一个全局遮挡弹窗广告！");
-                await targetPage.waitForTimeout(1000); // 关掉广告后等一秒钟让动画消失
+                await targetPage.waitForTimeout(1000); 
             }
         } catch (e) {}
 
-        // 2. 精准定位并点击名字叫 Console 的标签
         const topConsoleBtn = targetPage.locator('a').filter({ hasText: /^Console$/i }).first();
         await topConsoleBtn.waitFor({ state: 'visible', timeout: 10000 });
-        await topConsoleBtn.click({ force: true }); // force: true 可以无视一些透明的广告层强行点击
+        await topConsoleBtn.click({ force: true }); 
         await targetPage.waitForLoadState('domcontentloaded');
         await targetPage.waitForTimeout(3000);
         console.log("✅ [步骤 6] 已准确切换至 Console 控制台界面。");
-        // ==========================================
 
         console.log("⏳ [步骤 7] 寻找 ADD 90 MINUTES 续期按钮...");
         const addTimeBtn = targetPage.getByRole('button', { name: /ADD 90 MINUTES/i });
@@ -238,6 +237,12 @@ async function autoSolveCaptcha(page) {
             console.log("✅ [步骤 7] 已点击续期按钮，进入看广告防断网循环。");
         } catch (e) {
             console.log("ℹ️ [日常巡逻] 未发现续期按钮，时间大概率还在冷却中。本次巡逻安全结束。");
+            
+            // 🌟 补丁：冷却中也拍个照
+            const cooldownPicPath = path.join(__dirname, 'screenshots', `cooldown_${Date.now()}.png`);
+            await targetPage.screenshot({ path: cooldownPicPath, fullPage: true }).catch(()=>{});
+            console.log(`📸 冷却中状态截图已保存: ${cooldownPicPath}`);
+
             await sendTelegramMessage(`🎮 Gaming4Free 巡逻正常\n账号: ${MC_USERNAME}\n状态: 续期冷却中，无需操作。`);
             return; 
         }
@@ -272,6 +277,12 @@ async function autoSolveCaptcha(page) {
 
         if (!success) {
             console.log("ℹ️ [日常巡逻] 广告期间遭遇风控阻断，本次巡逻隐蔽撤退，下小时重试。");
+            
+            // 🌟 补丁：广告阶段风控撤退截图
+            const retreatAdPicPath = path.join(__dirname, 'screenshots', `retreat_ad_${Date.now()}.png`);
+            await targetPage.screenshot({ path: retreatAdPicPath, fullPage: true }).catch(()=>{});
+            console.log(`📸 广告阻断截图已保存留档: ${retreatAdPicPath}`);
+
             return;
         }
 
