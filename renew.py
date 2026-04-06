@@ -35,7 +35,7 @@ def send_telegram_message(text):
         pass
 
 def solve_audio_captcha(page):
-    print("  [透视雷达] 正在扫描验证码框架...")
+    print("  [破壁机] 正在扫描验证码框架...")
     try:
         checkbox_clicked = False
         for f in page.frames:
@@ -43,7 +43,7 @@ def solve_audio_captcha(page):
                 try:
                     checkbox = f.locator('.recaptcha-checkbox-border')
                     if checkbox.is_visible(timeout=1000):
-                        print("  [透视雷达] 发现显式复选框，正在执行点击...")
+                        print("  [破壁机] 发现显式复选框，正在执行点击...")
                         checkbox.click(force=True)
                         checkbox_clicked = True
                         time.sleep(3)
@@ -52,7 +52,7 @@ def solve_audio_captcha(page):
                     pass
 
         if not checkbox_clicked:
-            print("  [透视雷达] 未发现/未点击复选框，判定为 Invisible 模式...")
+            print("  [破壁机] 未发现/未点击复选框，判定为 Invisible 模式...")
 
         target_frame = None
         audio_btn = None
@@ -73,10 +73,10 @@ def solve_audio_captcha(page):
             time.sleep(1)
 
         if not target_frame or not audio_btn:
-            print("  [透视雷达] ✅ 未发现验证码弹窗，判定为免检！")
+            print("  [破壁机] ✅ 未发现验证码弹窗，判定为免检！")
             return True
 
-        print("  [透视雷达] 🎯 锁定目标弹窗！切入音频模式...")
+        print("  [破壁机] 🎯 锁定目标弹窗！切入音频模式...")
         try:
             audio_btn.click(force=True, timeout=5000)
         except Exception:
@@ -85,20 +85,20 @@ def solve_audio_captcha(page):
         time.sleep(2)
 
         for attempt in range(3):
-            print(f"  [透视雷达] 🎵 开始第 {attempt + 1} 次音频破解...")
+            print(f"  [破壁机] 🎵 开始第 {attempt + 1} 次音频破解...")
             
             error_msg = target_frame.locator('.rc-doscaptcha-header-text')
             if error_msg.is_visible(timeout=1000) and "Try again later" in error_msg.inner_text():
-                print("  [透视雷达] 🚨 遭遇 Google 信用降级拦截！当前 IP 已被谷歌暂时封锁音频通道。")
+                print("  [破壁机] 🚨 遭遇 Google 信用降级拦截！当前 IP 已被封锁音频通道。")
                 return False
 
-            print(f"  [透视雷达] ⬇️ 尝试提取音频直链...")
+            print(f"  [破壁机] ⬇️ 尝试提取音频直链...")
             try:
                 audio_src_locator = target_frame.locator('#audio-source')
                 audio_src_locator.wait_for(state='attached', timeout=5000) 
                 audio_url = audio_src_locator.get_attribute('src')
             except Exception:
-                print("  [透视雷达] ⚠️ 5秒内未获取到音频源！退出死循环！")
+                print("  [破壁机] ⚠️ 5秒内未获取到音频源！退出死循环！")
                 return False
                 
             if not audio_url:
@@ -120,13 +120,13 @@ def solve_audio_captcha(page):
                 with sr.AudioFile("captcha.wav") as source:
                     audio_data = recognizer.record(source)
                     text = recognizer.recognize_google(audio_data)
-                    print(f"  [透视雷达] 🔓 解码成功！密码为: {text}")
+                    print(f"  [破壁机] 🔓 解码成功！密码为: {text}")
 
                 try:
                     target_frame.locator('#audio-response').fill(text, timeout=3000)
                     target_frame.locator('#recaptcha-verify-button').click(force=True, timeout=3000)
                 except Exception as e:
-                    print(f"  [透视雷达] ✅ 填入密码时框架异常断开，判定为极速秒过！")
+                    print(f"  [破壁机] ✅ 填入密码时框架异常断开，判定为极速秒过！")
                     return True
                     
                 time.sleep(4)
@@ -134,18 +134,18 @@ def solve_audio_captcha(page):
                 try:
                     error_msg_after = target_frame.locator('.rc-audiochallenge-error-message')
                     if error_msg_after.is_visible(timeout=2000):
-                        print("  [透视雷达] ⚠️ 答案不被接受，刷新验证码...")
+                        print("  [破壁机] ⚠️ 答案不被接受，刷新验证码...")
                         target_frame.locator('#recaptcha-reload-button').click(force=True)
                         time.sleep(3)
                         continue 
                 except Exception:
-                    print("  [透视雷达] ✅ 检查提示时发现框架已彻底销毁，验证成功通过！")
+                    print("  [破壁机] ✅ 检查提示时发现框架已彻底销毁，验证成功通过！")
                     return True
 
                 return True
 
             except sr.UnknownValueError:
-                print("  [透视雷达] ⚠️ 语音模糊！刷新重试...")
+                print("  [破壁机] ⚠️ 语音模糊！刷新重试...")
                 try:
                     target_frame.locator('#recaptcha-reload-button').click(force=True)
                     time.sleep(3)
@@ -159,9 +159,9 @@ def solve_audio_captcha(page):
     except Exception as e:
         err_str = str(e).lower()
         if "closed" in err_str or "detached" in err_str or "destroyed" in err_str:
-            print("  [透视雷达] ✅ 检测到外围页面框架被销毁，这是被放行的标志！")
+            print("  [破壁机] ✅ 检测到外围页面框架被销毁，这是被放行的标志！")
             return True
-        print(f"  [透视雷达] 💥 外围异常捕获: {e}")
+        print(f"  [破壁机] 💥 外围异常捕获: {e}")
         return False
 
 def run():
@@ -185,10 +185,8 @@ def run():
         )
         page = context.new_page()
         
-        # ======== 🌟 核心修复：原生轻量级隐身 ========
-        # 悄悄抹除 webdriver 标记，不引入第三方插件，绝对不破坏网页结构！
+        # 原生轻量级隐身，抹除机器指纹
         page.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
-        # ============================================
 
         try:
             print("🔥 [步骤 1] 直达核心 Panel 面板...")
@@ -252,69 +250,54 @@ def run():
             
             if renew_btn.is_visible(timeout=5000):
                 renew_btn.click(force=True)
-                print("✅ 成功点击续期！拥有真实解码器的 Chrome 正在硬扛视频广告...")
                 
-                print("🖱️ 模拟真实鼠标：盲点屏幕中心，尝试强制唤醒休眠的视频广告...")
-                try:
-                    page.mouse.click(960, 540)
-                    time.sleep(1)
-                    page.mouse.click(960, 540)
-                except:
-                    pass
+                # ======== 🌟 化繁为简：佛系强制挂机，陪它把广告放完 ========
+                print("✅ 成功点击续期！")
+                print("📺 [静默看广告] 强制挂机 45 秒！不管出什么弹窗绝不瞎点，耐心等广告加载并结束...")
+                time.sleep(45) 
+                # ==============================================================
 
+                print("🔍 [雷达苏醒] 广告理论上已结束！开始寻找真实验证码或 PLEASE WAIT 按钮...")
                 global_success = False
-                consecutive_captcha_fails = 0
-                radar_cooldown_end = 0 
                 
-                for check_round in range(1, 21): 
+                # 广告看完后，再给它 60 秒的时间处理后续逻辑（验证码或者直接变灰）
+                for check_round in range(1, 13): 
                     time.sleep(5)
-                    print(f"  -> 🔍 第 {check_round} 次心跳检测...")
-                    
-                    current_time = time.time()
-                    if current_time > radar_cooldown_end:
-                        challenge_popped = False
-                        for f in page.frames:
-                            if 'bframe' in f.url or 'recaptcha' in f.url:
-                                try:
-                                    if f.locator('#recaptcha-audio-button').is_visible():
-                                        challenge_popped = True
-                                        break
-                                except:
-                                    pass
-                        
-                        if challenge_popped:
-                            print("⚠️ 雷达警报！侦测到疑似验证码弹窗，前去查探...")
-                            res = solve_audio_captcha(page)
-                            if not res:
-                                consecutive_captcha_fails += 1
-                            else:
-                                consecutive_captcha_fails = 0
-                                
-                            if consecutive_captcha_fails >= 2:
-                                print("🛑 连续 2 次提取音频失败！判定当前为广告遮挡下的【幽灵框架】！")
-                                print("🛑 雷达将强制进入 30 秒静默冷却期，绝不干扰广告播放！")
-                                radar_cooldown_end = current_time + 30
-                                consecutive_captcha_fails = 0 
-                    else:
-                        print(f"  [雷达冷却中 🧊] 脚本正在乖乖挂机看广告... (剩余冷却约 {int(radar_cooldown_end - current_time)} 秒)")
+                    print(f"  -> 🔍 第 {check_round} 次扫荡检测...")
                                 
                     try:
+                        # 先看是不是已经成功变灰了
                         wait_btn = page.get_by_role("button", name=re.compile("PLEASE WAIT", re.IGNORECASE))
                         if wait_btn.is_visible(timeout=1000):
-                            print("🎯 捕捉到决定性证据！按钮已成功变为 'PLEASE WAIT'！")
+                            print("🎯 漂亮！按钮已成功变灰为 'PLEASE WAIT'，时长到账！")
                             global_success = True
                             break
                     except Exception:
                         pass
+
+                    # 如果没成功，看看是不是弹出了真实的验证码
+                    challenge_popped = False
+                    for f in page.frames:
+                        if 'bframe' in f.url or 'recaptcha' in f.url:
+                            try:
+                                if f.locator('#recaptcha-audio-button').is_visible():
+                                    challenge_popped = True
+                                    break
+                            except:
+                                pass
+                    
+                    if challenge_popped:
+                        print("⚠️ 发现广告结束后的真实验证码弹窗，出拳硬解！...")
+                        solve_audio_captcha(page)
                 
                 if not global_success:
-                    print("⚠️ 100秒侦测完毕依然在转圈！前端可能假死。执行 F5 强制刷新进行最终核验...")
+                    print("⚠️ 扫荡完毕依然没看到灰按钮！尝试 F5 强制刷新提取最终结果...")
                     try:
                         page.reload(wait_until="domcontentloaded", timeout=20000)
                         time.sleep(5)
                         verify_btn = page.get_by_role("button", name=re.compile("PLEASE WAIT", re.IGNORECASE))
                         if verify_btn.is_visible(timeout=5000):
-                            print("🎯 峰回路转！刷新后发现时长已在后台悄悄到账！按钮状态已更新！")
+                            print("🎯 峰回路转！刷新后发现时长已在后台悄悄到账！")
                             global_success = True
                     except Exception as e:
                         print(f"刷新核验异常: {e}")
@@ -325,7 +308,7 @@ def run():
                     send_telegram_message(f"🎮 Gaming4Free 续期成功！\n账号: {USERNAME}\n状态: 成功熬过广告并斩获 90 分钟！")
                     print("🎉🎉 破阵成功！全流程完美收官！")
                 else:
-                    print("❌ 彻底失败：刷新后依然没有冷却按钮，广告绝对被拦截了。")
+                    print("❌ 彻底失败：截图已保存。可能广告彻底没加载出来。")
                     page.screenshot(path="screenshots/timeout_renew.png", full_page=True)
             else:
                 print("ℹ️ 未找到 ADD 90 MINUTES 按钮。")
