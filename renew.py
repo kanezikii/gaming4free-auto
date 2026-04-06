@@ -6,7 +6,7 @@ import re
 import speech_recognition as sr
 from pydub import AudioSegment
 from playwright.sync_api import sync_playwright
-from playwright_stealth import stealth_sync  # 🌟 新增：引入顶级隐身护甲
+from playwright_stealth import stealth_sync
 
 # ==========================================
 # ✅ 账号信息和 TG 机器人信息
@@ -186,13 +186,21 @@ def run():
         )
         page = context.new_page()
         
-        # 🌟 核心防封杀：给页面披上伪装战甲，抹除自动化特征
         stealth_sync(page)
 
         try:
             print("🔥 [步骤 1] 直达核心 Panel 面板...")
             page.goto('https://panel.gaming4free.net', wait_until='domcontentloaded', timeout=60000)
-            page.wait_for_selector('input[type="password"]', timeout=15000)
+            
+            # ======== 🌟 核心修复区：放宽等待，增加错误截图 ========
+            print("⏳ 正在等待 Cloudflare 盾牌放行及页面渲染 (最高等待 60 秒)...")
+            try:
+                page.wait_for_selector('input[type="password"]', timeout=60000)
+            except Exception as e:
+                print("🚨 致命错误：60秒后依然未找到密码框！可能遭遇死盾拦截或网络极差。")
+                page.screenshot(path="screenshots/error_login_page.png", full_page=True)
+                raise Exception("LOGIN_PAGE_TIMEOUT")
+            # ======================================================
             
             print("🔑 填入账号密码...")
             page.locator('input:not([type="hidden"]):not([type="password"])').first.fill(USERNAME)
@@ -324,6 +332,10 @@ def run():
                 
         except Exception as e:
             print(f"💥 流程提前终止: {e}")
+            try:
+                page.screenshot(path="screenshots/fatal_error.png", full_page=True)
+            except:
+                pass
         finally:
             browser.close()
             print("🛑 脚本安全结束。")
