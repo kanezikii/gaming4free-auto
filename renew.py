@@ -35,7 +35,7 @@ def send_telegram_message(text):
 
 def solve_audio_captcha(page):
     """
-    终极破壁：动态全栈扫描 iframe，彻底避开"幽灵框架"陷阱
+    终极破壁：防 403 拦截 + AI 容错重试机制
     """
     print("  [透视雷达] 正在扫描验证码框架...")
     try:
@@ -88,37 +88,71 @@ def solve_audio_captcha(page):
             
         time.sleep(2)
 
-        error_msg = target_frame.locator('.rc-doscaptcha-header-text')
-        if error_msg.is_visible(timeout=2000) and "Try again later" in error_msg.inner_text():
-            print("  [透视雷达] 🚨 遭遇 Google 信用降级拦截 (音频通道被封锁)！")
-            return False
-
-        audio_url = target_frame.locator('#audio-source').get_attribute('src')
-        if not audio_url:
-            print("  [透视雷达] ❌ 无法获取音频 URL")
-            return False
+        # ====== 加入重试机制 (最高尝试3次) ======
+        for attempt in range(3):
+            print(f"  [透视雷达] 🎵 开始第 {attempt + 1} 次音频破解尝试...")
             
-        print(f"  [透视雷达] ⬇️ 成功截获音频流址，正在下载底包...")
-        urllib.request.urlretrieve(audio_url, "captcha.mp3")
+            error_msg = target_frame.locator('.rc-doscaptcha-header-text')
+            if error_msg.is_visible(timeout=1000) and "Try again later" in error_msg.inner_text():
+                print("  [透视雷达] 🚨 遭遇 Google 信用降级拦截 (音频通道被封锁)！")
+                return False
 
-        print("  [透视雷达] 🔄 正在进行音频基因重组 (MP3 -> WAV)...")
-        sound = AudioSegment.from_mp3("captcha.mp3")
-        sound.export("captcha.wav", format="wav")
+            audio_url = target_frame.locator('#audio-source').get_attribute('src')
+            if not audio_url:
+                print("  [透视雷达] ❌ 无法获取音频 URL")
+                return False
+                
+            print(f"  [透视雷达] ⬇️ 成功截获音频流址，正在伪装浏览器下载底包...")
+            
+            # 使用 requests 强力伪装，防止被 Google 返回 403 HTML 导致解析失败
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                'Accept': 'audio/webm,audio/ogg,audio/wav,audio/*;q=0.9,application/ogg;q=0.7,video/*;q=0.6,*/*;q=0.5'
+            }
+            audio_res = requests.get(audio_url, headers=headers, timeout=15)
+            with open("captcha.mp3", "wb") as f:
+                f.write(audio_res.content)
 
-        print("  [透视雷达] 🧠 启动神经语音解码...")
-        recognizer = sr.Recognizer()
-        with sr.AudioFile("captcha.wav") as source:
-            audio_data = recognizer.record(source)
-            text = recognizer.recognize_google(audio_data)
-            print(f"  [透视雷达] 🔓 解码成功！验证密码为: {text}")
+            print("  [透视雷达] 🔄 正在进行音频基因重组 (MP3 -> WAV)...")
+            sound = AudioSegment.from_mp3("captcha.mp3")
+            sound.export("captcha.wav", format="wav")
 
-        target_frame.locator('#audio-response').fill(text)
-        target_frame.locator('#recaptcha-verify-button').click(force=True)
-        time.sleep(4)
-        return True
+            print("  [透视雷达] 🧠 启动神经语音解码...")
+            recognizer = sr.Recognizer()
+            
+            try:
+                with sr.AudioFile("captcha.wav") as source:
+                    audio_data = recognizer.record(source)
+                    text = recognizer.recognize_google(audio_data)
+                    print(f"  [透视雷达] 🔓 解码成功！验证密码为: {text}")
+
+                target_frame.locator('#audio-response').fill(text)
+                target_frame.locator('#recaptcha-verify-button').click(force=True)
+                time.sleep(4)
+                
+                # 检查提交后是否提示错误（比如 Google 觉得答案不对要求重试）
+                error_msg_after = target_frame.locator('.rc-audiochallenge-error-message')
+                if error_msg_after.is_visible(timeout=2000):
+                    print("  [透视雷达] ⚠️ 答案似乎不被接受，自动刷新验证码...")
+                    target_frame.locator('#recaptcha-reload-button').click(force=True)
+                    time.sleep(3)
+                    continue # 继续下一次循环
+                    
+                return True
+
+            except sr.UnknownValueError:
+                print("  [透视雷达] ⚠️ 语音太过模糊或为空，API 无法识别！自动点击刷新按钮更换音频...")
+                target_frame.locator('#recaptcha-reload-button').click(force=True)
+                time.sleep(3)
+            except sr.RequestError as e:
+                print(f"  [透视雷达] ❌ 语音识别 API 请求失败: {e}")
+                return False
+                
+        print("  [透视雷达] ❌ 3 次尝试均失败，放弃破解。")
+        return False
 
     except Exception as e:
-        print(f"  [透视雷达] 💥 验证码破解链路断裂: {e}")
+        print(f"  [透视雷达] 💥 验证码破解外围链路断裂: {e}")
         return False
 
 def run():
@@ -199,12 +233,10 @@ def run():
                 renew_btn.click(force=True)
                 print("✅ 成功点击续期！平台将强行弹出强制广告...")
                 
-                # ======== 挂机看广告逻辑 (45秒容错) ========
                 print("⏳ 开启防卡死倒计时，乖乖等待广告播放及网络缓冲 (安全期 45 秒)...")
                 for wait_sec in range(45, 0, -5):
                     print(f"  -> 📺 广告播放中... 剩余约 {wait_sec} 秒")
                     time.sleep(5)
-                # ===========================================
                 
                 print("✅ 广告等待期结束！正在侦测是否触发二次验证...")
                 
