@@ -6,6 +6,7 @@ import re
 import speech_recognition as sr
 from pydub import AudioSegment
 from playwright.sync_api import sync_playwright
+from playwright_stealth import stealth_sync  # 🌟 新增：引入顶级隐身护甲
 
 # ==========================================
 # ✅ 账号信息和 TG 机器人信息
@@ -89,7 +90,7 @@ def solve_audio_captcha(page):
             
             error_msg = target_frame.locator('.rc-doscaptcha-header-text')
             if error_msg.is_visible(timeout=1000) and "Try again later" in error_msg.inner_text():
-                print("  [透视雷达] 🚨 遭遇 Google 信用降级拦截！")
+                print("  [透视雷达] 🚨 遭遇 Google 信用降级拦截！当前 IP 已被谷歌暂时封锁音频通道。")
                 return False
 
             print(f"  [透视雷达] ⬇️ 尝试提取音频直链...")
@@ -184,6 +185,9 @@ def run():
             user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
         )
         page = context.new_page()
+        
+        # 🌟 核心防封杀：给页面披上伪装战甲，抹除自动化特征
+        stealth_sync(page)
 
         try:
             print("🔥 [步骤 1] 直达核心 Panel 面板...")
@@ -220,17 +224,15 @@ def run():
             page.wait_for_selector('text="My renqi"', timeout=20000)
             print("🎉 突破大门，成功进入后台服务器列表！")
             
-            # ======== 🌟 核心修复区：彻底移除了致命的 networkidle 等待 ========
             print("🖱️ 正在点击进入服务器详情...")
             page.get_by_text('My renqi', exact=False).first.click(force=True)
-            time.sleep(4) # 直接物理休眠，不管后台网速多乱
+            time.sleep(4) 
             
             print("🎛️ 切换至 Console 面板...")
             console_tab = page.locator('a').filter(has_text='Console').first
-            console_tab.wait_for(state='visible', timeout=10000) # 只要按钮露头就直接点
+            console_tab.wait_for(state='visible', timeout=10000) 
             console_tab.click(force=True)
             time.sleep(4) 
-            # ====================================================================
             
             cooldown_btn = page.get_by_role('button', name=re.compile("PLEASE WAIT", re.IGNORECASE))
             if cooldown_btn.is_visible(timeout=3000):
@@ -315,7 +317,7 @@ def run():
                     send_telegram_message(f"🎮 Gaming4Free 续期成功！\n账号: {USERNAME}\n状态: 成功熬过广告并斩获 90 分钟！")
                     print("🎉🎉 破阵成功！全流程完美收官！")
                 else:
-                    print("❌ 彻底失败：刷新后依然没有冷却按钮，广告绝对被拦截了。请检查 Sing-box 是否拦截了 ads 域名！")
+                    print("❌ 彻底失败：刷新后依然没有冷却按钮，广告绝对被拦截了。")
                     page.screenshot(path="screenshots/timeout_renew.png", full_page=True)
             else:
                 print("ℹ️ 未找到 ADD 90 MINUTES 按钮。")
