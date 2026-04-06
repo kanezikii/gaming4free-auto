@@ -98,7 +98,7 @@ def solve_audio_captcha(page):
                 audio_src_locator.wait_for(state='attached', timeout=5000) 
                 audio_url = audio_src_locator.get_attribute('src')
             except Exception:
-                print("  [透视雷达] ⚠️ 5秒内未获取到音频源！可能遭遇风控静默拦截或验证已在后台通过。退出死循环！")
+                print("  [透视雷达] ⚠️ 5秒内未获取到音频源！退出死循环！")
                 return False
                 
             if not audio_url:
@@ -220,13 +220,17 @@ def run():
             page.wait_for_selector('text="My renqi"', timeout=20000)
             print("🎉 突破大门，成功进入后台服务器列表！")
             
+            # ======== 🌟 核心修复区：彻底移除了致命的 networkidle 等待 ========
+            print("🖱️ 正在点击进入服务器详情...")
             page.get_by_text('My renqi', exact=False).first.click(force=True)
-            page.wait_for_load_state('networkidle')
-            time.sleep(3) 
+            time.sleep(4) # 直接物理休眠，不管后台网速多乱
             
-            page.locator('a').filter(has_text='Console').first.click(force=True)
-            page.wait_for_load_state('networkidle')
-            time.sleep(3)
+            print("🎛️ 切换至 Console 面板...")
+            console_tab = page.locator('a').filter(has_text='Console').first
+            console_tab.wait_for(state='visible', timeout=10000) # 只要按钮露头就直接点
+            console_tab.click(force=True)
+            time.sleep(4) 
+            # ====================================================================
             
             cooldown_btn = page.get_by_role('button', name=re.compile("PLEASE WAIT", re.IGNORECASE))
             if cooldown_btn.is_visible(timeout=3000):
@@ -240,7 +244,6 @@ def run():
                 renew_btn.click(force=True)
                 print("✅ 成功点击续期！拥有真实解码器的 Chrome 正在硬扛视频广告...")
                 
-                # ======== 🌟 核心修复区 1：盲点唤醒 ========
                 print("🖱️ 模拟真实鼠标：盲点屏幕中心，尝试强制唤醒休眠的视频广告...")
                 try:
                     page.mouse.click(960, 540)
@@ -248,7 +251,6 @@ def run():
                     page.mouse.click(960, 540)
                 except:
                     pass
-                # ==========================================
 
                 global_success = False
                 consecutive_captcha_fails = 0
@@ -295,7 +297,6 @@ def run():
                     except Exception:
                         pass
                 
-                # ======== 🌟 核心修复区 2：强制刷新核验 ========
                 if not global_success:
                     print("⚠️ 100秒侦测完毕依然在转圈！前端可能假死。执行 F5 强制刷新进行最终核验...")
                     try:
@@ -307,7 +308,6 @@ def run():
                             global_success = True
                     except Exception as e:
                         print(f"刷新核验异常: {e}")
-                # ==============================================
 
                 if global_success:
                     time.sleep(2) 
