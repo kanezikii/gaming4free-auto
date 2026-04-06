@@ -2,6 +2,7 @@ import os
 import time
 import requests
 import urllib.request
+import re  # 引入正则模块，用于模糊匹配按钮文本
 import speech_recognition as sr
 from pydub import AudioSegment
 from playwright.sync_api import sync_playwright
@@ -35,7 +36,7 @@ def send_telegram_message(text):
 
 def solve_audio_captcha(page):
     """
-    终极破壁：防 403 拦截 + AI 容错重试 + 页面跳转识别
+    终极破壁：防 403 拦截 + AI 容错重试 + 页面跳转识别 + 5秒急速超时判定
     """
     print("  [透视雷达] 正在扫描验证码框架...")
     try:
@@ -96,7 +97,15 @@ def solve_audio_captcha(page):
                 print("  [透视雷达] 🚨 遭遇 Google 信用降级拦截 (音频通道被封锁)！")
                 return False
 
-            audio_url = target_frame.locator('#audio-source').get_attribute('src')
+            print(f"  [透视雷达] ⬇️ 尝试提取音频直链...")
+            try:
+                audio_src_locator = target_frame.locator('#audio-source')
+                audio_src_locator.wait_for(state='attached', timeout=5000) 
+                audio_url = audio_src_locator.get_attribute('src')
+            except Exception:
+                print("  [透视雷达] ⚠️ 5秒内未获取到音频源！可能遭遇风控静默拦截或验证已在后台通过。退出死循环！")
+                return False
+                
             if not audio_url:
                 print("  [透视雷达] ❌ 无法获取音频 URL")
                 return False
@@ -150,11 +159,9 @@ def solve_audio_captcha(page):
 
     except Exception as e:
         err_str = str(e).lower()
-        # ======== 关键修复：将页面跳转销毁视为成功标志 ========
         if "closed" in err_str or "detached" in err_str or "destroyed" in err_str:
             print("  [透视雷达] ✅ 检测到页面跳转或框架被销毁，这是验证成功被放行的标志！")
             return True
-        # ======================================================
         print(f"  [透视雷达] 💥 验证码破解外围链路断裂: {e}")
         return False
 
@@ -229,23 +236,30 @@ def run():
             page.wait_for_load_state('networkidle')
             time.sleep(3)
             
-            print("⏳ 准备续期...")
+            # ======== 终极校验逻辑 ========
+            # 1. 先检查是不是已经在冷却中了 (按钮显示 PLEASE WAIT)
+            cooldown_btn = page.get_by_role('button', name=re.compile("PLEASE WAIT", re.IGNORECASE))
+            if cooldown_btn.is_visible(timeout=3000):
+                print("ℹ️ 续期处于冷却中 (已显示 PLEASE WAIT)，本次任务已达完美状态。")
+                page.screenshot(path="screenshots/cooldown.png", full_page=True)
+                return
+
+            # 2. 如果没冷却，寻找 ADD 90 MINUTES 按钮
+            print("⏳ 准备执行续期点击...")
             renew_btn = page.get_by_role('button', name='ADD 90 MINUTES').first
             
             if renew_btn.is_visible(timeout=5000):
                 renew_btn.click(force=True)
-                print("✅ 成功点击续期！平台将强行弹出强制广告...")
+                print("✅ 成功点击续期！开启动态雷达侦测，死盯最终成功标志...")
                 
-                print("⏳ 开启防卡死倒计时，乖乖等待广告播放及网络缓冲 (安全期 45 秒)...")
-                for wait_sec in range(45, 0, -5):
-                    print(f"  -> 📺 广告播放中... 剩余约 {wait_sec} 秒")
+                global_success = False
+                # 最高循环 18 次 * 5秒 = 90秒，足够覆盖广告和缓冲
+                for check_round in range(1, 19):
                     time.sleep(5)
-                
-                print("✅ 广告等待期结束！正在侦测是否触发二次验证...")
-                
-                challenge_popped = False
-                for _ in range(10): 
-                    time.sleep(1)
+                    print(f"  -> 🔍 第 {check_round} 次雷达扫描 (广告播放或验证中)...")
+                    
+                    # 侦测A：是否遭遇暗杀弹窗 (验证码)
+                    challenge_popped = False
                     for f in page.frames:
                         if 'bframe' in f.url or 'recaptcha' in f.url:
                             try:
@@ -254,22 +268,33 @@ def run():
                                     break
                             except:
                                 pass
-                    if challenge_popped:
-                        break
-
-                if challenge_popped:
-                    print("⚠️ 广告结束后触发了二次风控，再次启动硬解...")
-                    solve_audio_captcha(page)
-                else:
-                    print("✅ 未检测到二次验证弹窗，时长已顺利到账！")
                     
-                time.sleep(5)
-                page.screenshot(path="screenshots/success_renew.png", full_page=True)
-                send_telegram_message(f"🎮 Gaming4Free 续期成功！\n账号: {USERNAME}\n状态: 已成功看穿广告并领取 90 分钟！")
-                print("🎉🎉 破阵成功！全流程完美收官！")
+                    if challenge_popped:
+                        print("⚠️ 雷达警报！侦测到二次风控弹窗，立即拦截并启动硬解...")
+                        solve_audio_captcha(page)
+                        time.sleep(3) # 解完缓冲一下，让前端反应过来
+                        
+                    # 侦测B：是否抵达胜利彼岸 (出现 PLEASE WAIT 按钮)
+                    try:
+                        wait_btn = page.get_by_role("button", name=re.compile("PLEASE WAIT", re.IGNORECASE))
+                        if wait_btn.is_visible(timeout=1000):
+                            print("🎯 捕捉到决定性证据！按钮已变为 'PLEASE WAIT'！")
+                            global_success = True
+                            break
+                    except Exception:
+                        pass
+                
+                if global_success:
+                    time.sleep(2) # 给截图留点 UI 渲染时间
+                    page.screenshot(path="screenshots/success_renew.png", full_page=True)
+                    send_telegram_message(f"🎮 Gaming4Free 续期成功！\n账号: {USERNAME}\n状态: 成功通过广告与验证，已获得 90 分钟！")
+                    print("🎉🎉 破阵成功！全流程完美收官！")
+                else:
+                    print("⚠️ 侦测雷达超时 (90秒)，按钮未变成 PLEASE WAIT，可能卡死或广告未放行。")
+                    page.screenshot(path="screenshots/timeout_renew.png", full_page=True)
             else:
-                print("ℹ️ 未找到可点击的续期按钮，可能在冷却中。")
-                page.screenshot(path="screenshots/cooldown.png", full_page=True)
+                print("ℹ️ 未找到 ADD 90 MINUTES 按钮。")
+                page.screenshot(path="screenshots/no_button.png", full_page=True)
                 
         except Exception as e:
             print(f"💥 流程提前终止: {e}")
