@@ -41,9 +41,8 @@ async function autoSolveCaptcha(page) {
     try {
         const frames = page.frames();
         for (const frame of frames) {
-            if (frame.url().includes('bframe') || frame.url().includes('fallback')) {
+            if (frame.url().includes('bframe') || frame.url().includes('fallback') || frame.url().includes('recaptcha')) {
                 
-                // 1. 检查是否被谷歌直接拉黑死锁
                 const blockMsg = await frame.locator('.rc-doscaptcha-header-text').innerText().catch(() => '');
                 if (blockMsg.includes('Try again later')) {
                     console.log("  [透视雷达] 🚨 致命错误：当前 IP 请求被谷歌拦截 (Try again later)！");
@@ -53,31 +52,27 @@ async function autoSolveCaptcha(page) {
                 const audioBtn = frame.locator('#recaptcha-audio-button');
                 const solverBtn = frame.locator('#solver-button');
 
-                // 2. 只有确认耳机图标完全显示出来了，才说明验证码加载好了
                 if (await audioBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
-                    console.log("  [透视雷达] 🎧 发现验证码！由于美国节点延迟，正在耐心等待 Buster 插件注入 (最高10秒)...");
+                    console.log("  [透视雷达] 🎧 发现验证码！正在耐心等待 Buster 插件注入 (最高10秒)...");
 
-                    // 🌟 核心修复：死死盯住页面，给插件 10 秒的注入时间
                     await solverBtn.waitFor({ state: 'attached', timeout: 10000 }).catch(() => {});
 
                     if (await solverBtn.count() > 0) {
                         console.log("  [透视雷达] 🤖 锁定 Buster 小黄人！发送物理强制点击...");
                         await solverBtn.click({ force: true });
-                        await page.waitForTimeout(15000); // 留足 15 秒给它听语音并填写
+                        await page.waitForTimeout(15000); 
                         return 'solved';
                     } else {
                         console.log("  [透视雷达] ⚠️ 10秒过去未见 Buster。强行切入语音模式试试...");
                         await audioBtn.click({ force: true });
                         await page.waitForTimeout(3000); 
 
-                        // 切入语音后再次检查是否被拉黑
                         const blockMsg2 = await frame.locator('.rc-doscaptcha-header-text').innerText().catch(() => '');
                         if (blockMsg2.includes('Try again later')) {
                             console.log("  [透视雷达] 🚨 致命错误：切入语音瞬间被谷歌拦截！");
                             return 'blocked';
                         }
 
-                        // 再次寻找 Buster
                         await solverBtn.waitFor({ state: 'attached', timeout: 8000 }).catch(() => {});
                         if (await solverBtn.count() > 0) {
                             console.log("  [透视雷达] 🤖 语音模式下锁定 Buster！发送强杀点击...");
@@ -85,7 +80,8 @@ async function autoSolveCaptcha(page) {
                             await page.waitForTimeout(15000); 
                             return 'solved';
                         } else {
-                            console.log("  [透视雷达] ❌ 彻底找不到 Buster 按钮！");
+                            console.log("  [透视雷达] ❌ 彻底找不到 Buster 按钮！注入失败！");
+                            return 'missing_buster'; // 🌟 返回缺失状态，打破无限循环
                         }
                     }
                 }
@@ -107,7 +103,28 @@ async function autoSolveCaptcha(page) {
             const downloadUrl = JSON.parse(releaseJson).assets.find(a => a.name.includes('chrome')).browser_download_url;
             execSync(`curl -L -o /tmp/buster.zip "${downloadUrl}"`);
             execSync(`unzip -q -o /tmp/buster.zip -d ${busterPath}`);
-        } catch (e) {}
+            
+            // ==========================================
+            // 🌟 核心破壁：篡改 Buster 配置文件，强制全网注入！
+            // ==========================================
+            const manifestPath = path.join(busterPath, 'manifest.json');
+            if (fs.existsSync(manifestPath)) {
+                let manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+                if (manifest.content_scripts) {
+                    manifest.content_scripts.forEach(script => {
+                        if (script.matches) {
+                            script.matches.push("<all_urls>"); 
+                            script.matches.push("*://*/*");
+                        }
+                    });
+                    fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+                    console.log("✅ [底层破壁] 成功篡改 Buster 配置文件，已强制开启无差别全网注入！");
+                }
+            }
+            // ==========================================
+        } catch (e) {
+            console.error("下载或篡改 Buster 失败", e);
+        }
     }
 
     let context;
@@ -174,8 +191,9 @@ async function autoSolveCaptcha(page) {
                     break;
                 }
                 const capStatus = await autoSolveCaptcha(targetPage);
-                if (capStatus === 'blocked') {
-                    console.log("🚨 登录时就被拉黑，撤退！");
+                // 🌟 打破无限循环：如果彻底找不到插件，直接撤退
+                if (capStatus === 'blocked' || capStatus === 'missing_buster') {
+                    console.log("🚨 登录遭遇拦截或插件失效，终止死循环，立即撤退！");
                     break;
                 }
                 await targetPage.waitForTimeout(2000);
@@ -226,7 +244,8 @@ async function autoSolveCaptcha(page) {
                 if (i % 2 === 0) console.log(`  -> 广告播放/网络加载中... 已耐心等待 ${i * 5} 秒`);
                 
                 const captchaResult = await autoSolveCaptcha(targetPage);
-                if (captchaResult === 'blocked') {
+                // 🌟 打破无限循环
+                if (captchaResult === 'blocked' || captchaResult === 'missing_buster') {
                     ipBlocked = true;
                     break; 
                 }
@@ -243,7 +262,7 @@ async function autoSolveCaptcha(page) {
             }
 
             if (ipBlocked) {
-                console.log("❌ 遭遇 IP 彻底死锁，停止本回合尝试。");
+                console.log("❌ 遭遇 IP 死锁或插件失效，停止本回合尝试。");
                 break; 
             }
             if (adFinished) break;
@@ -261,7 +280,7 @@ async function autoSolveCaptcha(page) {
             return;
         }
 
-        console.log("🎉 全流程完美收官！");
+        console.log("🎉 全流程完美收收官！");
         await targetPage.waitForTimeout(3000);
         await targetPage.screenshot({ path: path.join(screenshotDir, `success_renew_${Date.now()}.png`), fullPage: true }).catch(()=>{});
         await sendTelegramMessage(`🎮 Gaming4Free 续期成功！\n账号: ${MC_USERNAME}\n状态: 已成功领取 90 分钟！`);
