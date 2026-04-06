@@ -70,7 +70,7 @@ jobs:
  
       - name: Install Python Packages
         run: |
-          pip install playwright pydub SpeechRecognition requests playwright-stealth==1.0.6
+          pip install playwright pydub SpeechRecognition requests
           playwright install chrome
           
       - name: Run Python Script
