@@ -67,12 +67,12 @@ jobs:
             echo "💥 伪装成功！当前出口 IP 为: $PROXY_IP"
           fi
           # ==========================================
-
+ 
       - name: Install Python Packages
         run: |
-          pip install playwright pydub SpeechRecognition requests
+          pip install playwright pydub SpeechRecognition requests playwright-stealth
           playwright install chrome
-
+          
       - name: Run Python Script
         run: |
           mkdir -p screenshots
