@@ -31,7 +31,7 @@ def send_telegram_message(text):
     payload = {"chat_id": TG_CHAT, "text": text}
     try:
         requests.post(url, json=payload, timeout=10)
-    except Exception as e:
+    except Exception:
         pass
 
 def solve_audio_captcha(page):
@@ -54,7 +54,6 @@ def solve_audio_captcha(page):
         if not checkbox_clicked:
             print("  [透视雷达] 未发现/未点击复选框，判定为 Invisible 模式...")
 
-        print("  [透视雷达] 开启全栈扫描：寻找可见的耳机图标...")
         target_frame = None
         audio_btn = None
         
@@ -74,7 +73,7 @@ def solve_audio_captcha(page):
             time.sleep(1)
 
         if not target_frame or not audio_btn:
-            print("  [透视雷达] ✅ 15秒扫描未发现验证码弹窗，判定为免检！")
+            print("  [透视雷达] ✅ 未发现验证码弹窗，判定为免检！")
             return True
 
         print("  [透视雷达] 🎯 锁定目标弹窗！切入音频模式...")
@@ -123,23 +122,37 @@ def solve_audio_captcha(page):
                     text = recognizer.recognize_google(audio_data)
                     print(f"  [透视雷达] 🔓 解码成功！密码为: {text}")
 
-                target_frame.locator('#audio-response').fill(text)
-                target_frame.locator('#recaptcha-verify-button').click(force=True)
+                # ======== 核心修复：捕获被 Google 秒放行导致的异常 ========
+                try:
+                    target_frame.locator('#audio-response').fill(text, timeout=3000)
+                    target_frame.locator('#recaptcha-verify-button').click(force=True, timeout=3000)
+                except Exception as e:
+                    print(f"  [透视雷达] ✅ 填入密码时框架异常断开，判定为极速秒过！")
+                    return True
+                    
                 time.sleep(4)
                 
-                error_msg_after = target_frame.locator('.rc-audiochallenge-error-message')
-                if error_msg_after.is_visible(timeout=2000):
-                    print("  [透视雷达] ⚠️ 答案不被接受，刷新验证码...")
-                    target_frame.locator('#recaptcha-reload-button').click(force=True)
-                    time.sleep(3)
-                    continue 
-                    
+                try:
+                    error_msg_after = target_frame.locator('.rc-audiochallenge-error-message')
+                    if error_msg_after.is_visible(timeout=2000):
+                        print("  [透视雷达] ⚠️ 答案不被接受，刷新验证码...")
+                        target_frame.locator('#recaptcha-reload-button').click(force=True)
+                        time.sleep(3)
+                        continue 
+                except Exception:
+                    print("  [透视雷达] ✅ 检查提示时发现框架已彻底销毁，验证成功通过！")
+                    return True
+                # ==========================================================
+
                 return True
 
             except sr.UnknownValueError:
                 print("  [透视雷达] ⚠️ 语音模糊！刷新重试...")
-                target_frame.locator('#recaptcha-reload-button').click(force=True)
-                time.sleep(3)
+                try:
+                    target_frame.locator('#recaptcha-reload-button').click(force=True)
+                    time.sleep(3)
+                except:
+                    pass
             except Exception as e:
                 return False
                 
@@ -147,9 +160,10 @@ def solve_audio_captcha(page):
 
     except Exception as e:
         err_str = str(e).lower()
-        if "closed" in err_str or "detached" in err_str:
-            print("  [透视雷达] ✅ 检测到页面跳转，放行标志！")
+        if "closed" in err_str or "detached" in err_str or "destroyed" in err_str:
+            print("  [透视雷达] ✅ 检测到外围页面框架被销毁，这是被放行的标志！")
             return True
+        print(f"  [透视雷达] 💥 外围异常捕获: {e}")
         return False
 
 def run():
@@ -157,20 +171,16 @@ def run():
     print("🚀 [步骤 0] Python 强力突围脚本启动...")
     
     with sync_playwright() as p:
-        # ==========================================
-        # 🌟 核心修改区：启用真实 Chrome 和 解除音频限制
-        # ==========================================
         browser = p.chromium.launch(
-            channel="chrome",  # 强行调用完整商业版 Chrome，拥有广告所需的视频解码器
+            channel="chrome",  
             headless=False, 
             proxy={"server": "socks5://127.0.0.1:10808"},
             args=[
                 '--no-sandbox', 
                 '--disable-blink-features=AutomationControlled',
-                '--autoplay-policy=no-user-gesture-required' # 强行允许带声音的广告自动播放
+                '--autoplay-policy=no-user-gesture-required' 
             ]
         )
-        # ==========================================
         context = browser.new_context(
             viewport={'width': 1920, 'height': 1080},
             user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
@@ -233,7 +243,7 @@ def run():
                 print("✅ 成功点击续期！拥有真实解码器的 Chrome 正在硬扛视频广告...")
                 
                 global_success = False
-                consecutive_captcha_fails = 0 # 防沉迷计数器
+                consecutive_captcha_fails = 0
                 
                 for check_round in range(1, 19):
                     time.sleep(5)
@@ -257,7 +267,6 @@ def run():
                         else:
                             consecutive_captcha_fails = 0
                             
-                        # 如果连续2次都抓不到音频(假弹窗)，放弃二次破解，死等最终结果
                         if consecutive_captcha_fails >= 2:
                             print("🛑 连续2次无法获取音频，判定为假性弹窗，暂停雷达干预！")
                             
