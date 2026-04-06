@@ -36,7 +36,6 @@ async function sendTelegramMessage(text) {
     } catch (e) {}
 }
 
-// 🌟 核心升级：动态死盯模式，完美包容家宽延迟！
 async function autoSolveCaptcha(page) {
     try {
         const frames = page.frames();
@@ -67,7 +66,6 @@ async function autoSolveCaptcha(page) {
                     let busterAppeared = false;
                     let isBlocked = false;
 
-                    // 🌟 开启 15 秒高频扫描循环
                     for (let j = 0; j < 15; j++) {
                         await page.waitForTimeout(1000);
                         
@@ -95,7 +93,7 @@ async function autoSolveCaptcha(page) {
                         await page.waitForTimeout(15000);
                         return 'solved';
                     } else {
-                        console.log("  [透视雷达] ❌ 异常：等了整整 15 秒依然未见 Buster。");
+                        console.log("  [透视雷达] ❌ 异常：等了整整 15 秒依然未见 Buster。可能是企业级拦截。");
                         return 'no_buster';
                     }
                 }
@@ -120,14 +118,47 @@ async function autoSolveCaptcha(page) {
         } catch (e) {}
     }
 
+    // ==========================================
+    // 🌟 终极破壁：基因重组 Buster 配置文件，强行开启企业级拦截网注入权限！
+    // ==========================================
     const manifestPath = path.join(busterPath, 'manifest.json');
     try {
         let manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+        let modified = false;
+
+        // 1. 修复 Manifest V3 兼容性
         if (manifest.manifest_version === 3 && manifest.action && !manifest.browser_action) {
             manifest.browser_action = manifest.action;
-            fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+            modified = true;
         }
-    } catch (e) {}
+
+        // 2. 强行加入 Enterprise 企业级风控匹配网址
+        if (manifest.content_scripts) {
+            manifest.content_scripts.forEach(script => {
+                if (script.matches) {
+                    const extraMatches = [
+                        "*://*.google.com/recaptcha/enterprise/bframe*",
+                        "*://*.recaptcha.net/recaptcha/enterprise/bframe*",
+                        "*://*.recaptcha.net/recaptcha/api2/bframe*"
+                    ];
+                    extraMatches.forEach(m => {
+                        if (!script.matches.includes(m)) {
+                            script.matches.push(m);
+                            modified = true;
+                        }
+                    });
+                }
+            });
+        }
+
+        if (modified) {
+            fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+            console.log("✅ [底层破壁] 成功篡改 Buster 配置文件！已强制打破谷歌 Enterprise 企业级限制！");
+        }
+    } catch (e) {
+        console.log("⚠️ 篡改 Buster 配置文件失败: " + e.message);
+    }
+    // ==========================================
 
     const screenshotDir = path.join(__dirname, 'screenshots');
     if (!fs.existsSync(screenshotDir)) fs.mkdirSync(screenshotDir);
@@ -174,7 +205,7 @@ async function autoSolveCaptcha(page) {
 
         if (pageType === 'login') {
             console.log(`🔑 发现登录框，填入账号...`);
-            await targetPage.locator('input:not([type="hidden"]):not([type="password"])').first().fill(MC_USERNAME);
+            await targetPage.locator('input:not([type="hidden"]):not([type="password"])').first().fill(MCUSERNAME);
             await pwdInput.fill(MC_PASSWORD);
             
             let readyToSolve = false;
@@ -234,7 +265,6 @@ async function autoSolveCaptcha(page) {
         }
 
         let globalSuccess = false;
-        let noBusterCount = 0; 
 
         for (let i = 1; i <= 30; i++) {
             await targetPage.waitForTimeout(5000); 
@@ -247,14 +277,9 @@ async function autoSolveCaptcha(page) {
                 await targetPage.screenshot({ path: path.join(screenshotDir, `analysis_blocked_${Date.now()}.png`), fullPage: true }).catch(()=>{});
                 break;
             } else if (capStatus === 'no_buster') {
-                noBusterCount++;
-                if (noBusterCount >= 3) {
-                    console.log("📸 连续 3 次找不到 Buster！可能被前端彻底屏蔽！");
-                    await targetPage.screenshot({ path: path.join(screenshotDir, `analysis_no_buster_${Date.now()}.png`), fullPage: true }).catch(()=>{});
-                    break; 
-                }
-            } else if (capStatus === 'solved') {
-                noBusterCount = 0;
+                console.log("📸 耳机已点击但找不到 Buster！立刻拍照取证并终止任务！");
+                await targetPage.screenshot({ path: path.join(screenshotDir, `analysis_no_buster_${Date.now()}.png`), fullPage: true }).catch(()=>{});
+                break; 
             }
 
             try {
