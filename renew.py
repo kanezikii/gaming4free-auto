@@ -35,7 +35,7 @@ def send_telegram_message(text):
 
 def solve_audio_captcha(page):
     """
-    终极破壁：防 403 拦截 + AI 容错重试机制
+    终极破壁：防 403 拦截 + AI 容错重试 + 页面跳转识别
     """
     print("  [透视雷达] 正在扫描验证码框架...")
     try:
@@ -88,7 +88,6 @@ def solve_audio_captcha(page):
             
         time.sleep(2)
 
-        # ====== 加入重试机制 (最高尝试3次) ======
         for attempt in range(3):
             print(f"  [透视雷达] 🎵 开始第 {attempt + 1} 次音频破解尝试...")
             
@@ -104,7 +103,6 @@ def solve_audio_captcha(page):
                 
             print(f"  [透视雷达] ⬇️ 成功截获音频流址，正在伪装浏览器下载底包...")
             
-            # 使用 requests 强力伪装，防止被 Google 返回 403 HTML 导致解析失败
             headers = {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
                 'Accept': 'audio/webm,audio/ogg,audio/wav,audio/*;q=0.9,application/ogg;q=0.7,video/*;q=0.6,*/*;q=0.5'
@@ -130,13 +128,12 @@ def solve_audio_captcha(page):
                 target_frame.locator('#recaptcha-verify-button').click(force=True)
                 time.sleep(4)
                 
-                # 检查提交后是否提示错误（比如 Google 觉得答案不对要求重试）
                 error_msg_after = target_frame.locator('.rc-audiochallenge-error-message')
                 if error_msg_after.is_visible(timeout=2000):
                     print("  [透视雷达] ⚠️ 答案似乎不被接受，自动刷新验证码...")
                     target_frame.locator('#recaptcha-reload-button').click(force=True)
                     time.sleep(3)
-                    continue # 继续下一次循环
+                    continue 
                     
                 return True
 
@@ -152,6 +149,12 @@ def solve_audio_captcha(page):
         return False
 
     except Exception as e:
+        err_str = str(e).lower()
+        # ======== 关键修复：将页面跳转销毁视为成功标志 ========
+        if "closed" in err_str or "detached" in err_str or "destroyed" in err_str:
+            print("  [透视雷达] ✅ 检测到页面跳转或框架被销毁，这是验证成功被放行的标志！")
+            return True
+        # ======================================================
         print(f"  [透视雷达] 💥 验证码破解外围链路断裂: {e}")
         return False
 
