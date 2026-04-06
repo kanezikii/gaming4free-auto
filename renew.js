@@ -36,48 +36,58 @@ async function sendTelegramMessage(text) {
     } catch (e) {}
 }
 
+// 🌟 核心修复：彻底废弃 evaluate 注入，使用 CDP 物理级真鼠标强行点击！
 async function autoSolveCaptcha(page) {
     try {
         const frames = page.frames();
         for (const frame of frames) {
             if (frame.url().includes('bframe') || frame.url().includes('fallback')) {
-                const status = await frame.evaluate(() => {
-                    const errorMsg = document.querySelector('.rc-doscaptcha-header-text'); 
-                    if (errorMsg && errorMsg.innerText.includes('Try again later')) return 'blocked';
-                    
-                    const solverBtn = document.querySelector('#solver-button');
-                    const audioBtn = document.querySelector('#recaptcha-audio-button');
-                    
-                    if (solverBtn) { solverBtn.click(); return 'clicked_buster'; }
-                    if (audioBtn) { audioBtn.click(); return 'clicked_audio'; }
-                    return 'none';
-                }).catch(() => 'error');
+                
+                const errorLocator = frame.locator('.rc-doscaptcha-header-text');
+                const solverBtn = frame.locator('#solver-button').first();
+                const audioBtn = frame.locator('#recaptcha-audio-button').first();
 
-                if (status === 'blocked') {
-                    console.log("  [透视雷达] 🚨 致命错误：当前 IP 被彻底拉黑，请求语音被谷歌拒绝 (Try again later)！");
-                    return 'blocked';
-                } else if (status === 'clicked_buster') {
-                    console.log("  [透视雷达] 🤖 发现验证码！已成功按下 Buster 小黄人，等待 15 秒破解...");
-                    await page.waitForTimeout(15000); 
+                // 1. 检查是否已被谷歌拉黑
+                if (await errorLocator.count() > 0) {
+                    if (await errorLocator.isVisible({timeout: 500}).catch(()=>false)) {
+                        const txt = await errorLocator.innerText();
+                        if (txt.includes('Try again later')) {
+                            console.log("  [透视雷达] 🚨 致命错误：被谷歌精准识别拦截 (Try again later)！");
+                            return 'blocked';
+                        }
+                    }
+                }
+
+                // 2. 发现 Buster，物理级点击
+                if (await solverBtn.count() > 0) {
+                    console.log("  [透视雷达] 🤖 发现 Buster！使用原生 CDP 物理级真鼠点击...");
+                    await solverBtn.click({ force: true });
+                    await page.waitForTimeout(15000);
                     return 'solved';
-                } else if (status === 'clicked_audio') {
-                    console.log("  [透视雷达] ⚠️ 发现验证码！无 Buster，正在强行切入语音模式...");
-                    await page.waitForTimeout(2000); 
-                    
-                    const retryStatus = await frame.evaluate(() => {
-                        const errorMsg = document.querySelector('.rc-doscaptcha-header-text'); 
-                        if (errorMsg && errorMsg.innerText.includes('Try again later')) return 'blocked';
-                        const btn = document.querySelector('#solver-button');
-                        if (btn) { btn.click(); return 'clicked_buster'; }
-                        return 'none';
-                    }).catch(() => 'none');
-                    
-                    if (retryStatus === 'blocked') {
-                        console.log("  [透视雷达] 🚨 致命错误：切入语音瞬间被谷歌拦截 (Try again later)！");
-                        return 'blocked';
-                    } else if (retryStatus === 'clicked_buster') {
-                        console.log("  [透视雷达] 🤖 语音模式下成功按下 Buster！等待 15 秒破解...");
-                        await page.waitForTimeout(15000); 
+                }
+
+                // 3. 发现耳机，物理级点击切入语音
+                if (await audioBtn.count() > 0) {
+                    console.log("  [透视雷达] ⚠️ 发现耳机图标！使用原生 CDP 物理级真鼠点击...");
+                    await audioBtn.click({ force: true });
+                    await page.waitForTimeout(2500); // 等待网络请求返回
+
+                    // 再次检查有没有被拉黑
+                    if (await errorLocator.count() > 0) {
+                        if (await errorLocator.isVisible({timeout: 500}).catch(()=>false)) {
+                            const txt = await errorLocator.innerText();
+                            if (txt.includes('Try again later')) {
+                                console.log("  [透视雷达] 🚨 切入语音瞬间被谷歌拦截 (Try again later)！家宽 IP 可能仍被限流。");
+                                return 'blocked';
+                            }
+                        }
+                    }
+
+                    // 语音模式下点击 Buster
+                    if (await solverBtn.count() > 0) {
+                        console.log("  [透视雷达] 🤖 语音模式就绪，使用原生 CDP 物理级点击 Buster...");
+                        await solverBtn.click({ force: true });
+                        await page.waitForTimeout(15000);
                         return 'solved';
                     }
                 }
@@ -106,7 +116,7 @@ async function autoSolveCaptcha(page) {
     let targetPage;
 
     try {
-        console.log("🔥 [步骤 1] 点火启动浏览器 (挂载美国家宽 + 隐身伪装)...");
+        console.log("🔥 [步骤 1] 点火启动浏览器 (挂载美国家宽 + 隐身防漏伪装)...");
         
         const manifestPath = path.join(busterPath, 'manifest.json');
         try {
@@ -114,7 +124,6 @@ async function autoSolveCaptcha(page) {
             if (manifest.manifest_version === 3 && manifest.action && !manifest.browser_action) {
                 manifest.browser_action = manifest.action;
                 fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
-                console.log("✅ [底层破壁] 成功篡改 Buster 配置文件，已强制开启无差别全网注入！");
             }
         } catch (e) {}
 
@@ -130,10 +139,25 @@ async function autoSolveCaptcha(page) {
                 '--disable-site-isolation-trials',
                 '--disable-features=IsolateOrigins,site-per-process',
                 '--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu',
-                '--window-size=1920,1080', '--disable-blink-features=AutomationControlled' 
+                '--window-size=1920,1080', '--disable-blink-features=AutomationControlled',
+                // 🌟 新增：暴力阻断 WebRTC 泄露，防止谷歌看穿 GitHub 服务器真身
+                '--enforce-webrtc-ip-permission-check',
+                '--force-webrtc-ip-handling-policy=disable-non-proxied-udp'
             ],
             ignoreDefaultArgs: ["--mute-audio", "--enable-automation"], 
         });
+
+        // 🌟 新增：启动后立即探针自检出口 IP
+        const ipPage = await context.newPage();
+        try {
+            await ipPage.goto('https://api.ipify.org', { timeout: 15000 });
+            const realIp = await ipPage.innerText('body');
+            console.log(`🌍 [代理自检] 当前浏览器核心全局出口 IP 为: ${realIp.trim()}`);
+        } catch(e) {
+            console.log("🌍 [代理自检] 检查 IP 超时，跳过...");
+        } finally {
+            await ipPage.close();
+        }
 
         const page = await context.newPage();
         targetPage = page;
@@ -167,15 +191,11 @@ async function autoSolveCaptcha(page) {
             await userInput.fill(MC_USERNAME);
             await pwdInput.fill(MC_PASSWORD);
             
-            // ==========================================
-            // 🌟 核心修复：按兵不动，死等 10 秒！
-            // ==========================================
             console.log("⏳ 账号密码已填好！正在死等 10 秒钟，让家宽缓慢加载完谷歌底层的验证码组件...");
             await targetPage.waitForTimeout(10000); 
 
-            console.log("🟢 10 秒已到，点击登录按钮！");
+            console.log("🟢 10 秒已到，物理点击登录按钮！");
             await targetPage.getByRole('button', { name: /LOGIN|登录|Sign In/i }).first().click({ force: true });
-            // ==========================================
 
             console.log("⏳ 盯防验证码...");
             let loginSuccess = false;
