@@ -35,63 +35,88 @@ def send_telegram_message(text):
 
 def solve_audio_captcha(page):
     """
-    终极破壁：直接拦截音频底包进行物理硬解 (完美兼容 Invisible 无感模式)
+    终极破壁：动态全栈扫描 iframe，彻底避开"幽灵框架"陷阱
     """
     print("  [透视雷达] 正在扫描验证码框架...")
     try:
-        # 1. 智能探测：看是否需要先点击“我不是机器人”复选框
-        main_frame = page.frame_locator('iframe[title*="reCAPTCHA"]').first
-        checkbox = main_frame.locator('.recaptcha-checkbox-border')
-        
-        if checkbox.is_visible(timeout=3000):
-            print("  [透视雷达] 发现显式复选框，正在执行点击...")
-            checkbox.click(timeout=3000)
-            time.sleep(3)
-        else:
-            print("  [透视雷达] 未发现复选框，判定为 Invisible 无感验证，直接接管挑战弹窗...")
+        # 1. 探测显式复选框 (兼容显式和隐式模式)
+        checkbox_clicked = False
+        for f in page.frames:
+            if 'anchor' in f.url or 'recaptcha' in f.url:
+                try:
+                    checkbox = f.locator('.recaptcha-checkbox-border')
+                    if checkbox.is_visible(timeout=1000):
+                        print("  [透视雷达] 发现显式复选框，正在执行点击...")
+                        checkbox.click()
+                        checkbox_clicked = True
+                        time.sleep(3)
+                        break
+                except:
+                    pass
 
-        # 2. 锁定并接管弹出的挑战框 iframe
-        bframe = page.frame_locator('iframe[title*="recaptcha challenge"]').first
+        if not checkbox_clicked:
+            print("  [透视雷达] 未发现/未点击复选框，判定为 Invisible 模式，准备拦截九宫格...")
+
+        # 2. 动态遍历扫描：寻找真实可见的挑战弹窗 (最高等待15秒)
+        print("  [透视雷达] 开启全栈扫描：寻找可见的耳机图标...")
+        target_frame = None
+        audio_btn = None
         
-        # 给弹窗一点加载时间（8秒），寻找耳机按钮
-        if not bframe.locator('#recaptcha-audio-button').is_visible(timeout=8000):
-            print("  [透视雷达] ✅ 信用极高或未触发强验证，直接通过！")
+        for _ in range(15):
+            for f in page.frames:
+                if 'bframe' in f.url or 'recaptcha' in f.url:
+                    try:
+                        btn = f.locator('#recaptcha-audio-button')
+                        # 核心逻辑：只锁定真正 visible 的耳机图标
+                        if btn.is_visible():
+                            target_frame = f
+                            audio_btn = btn
+                            break
+                    except:
+                        pass
+            if target_frame:
+                break
+            time.sleep(1) # 每秒扫描一次当前 DOM 树
+
+        if not target_frame or not audio_btn:
+            print("  [透视雷达] ✅ 15秒扫描未发现验证码弹窗，判定为信用免检，直接通过！")
             return True
 
-        print("  [透视雷达] 锁定耳机图标，切入音频模式...")
-        bframe.locator('#recaptcha-audio-button').click()
+        # 3. 开始执行硬解
+        print("  [透视雷达] 🎯 锁定目标弹窗！切入音频模式...")
+        audio_btn.click()
         time.sleep(2)
 
         # 检查是否被 Google 封锁音频通道
-        error_msg = bframe.locator('.rc-doscaptcha-header-text')
+        error_msg = target_frame.locator('.rc-doscaptcha-header-text')
         if error_msg.is_visible(timeout=2000) and "Try again later" in error_msg.inner_text():
-            print("  [透视雷达] 🚨 遭遇 Google 信用降级拦截 (IP被限制)！")
+            print("  [透视雷达] 🚨 遭遇 Google 信用降级拦截 (音频通道被封锁)！")
             return False
 
-        # 3. 截获音频文件直链
-        audio_url = bframe.locator('#audio-source').get_attribute('src')
+        # 4. 截获音频文件直链
+        audio_url = target_frame.locator('#audio-source').get_attribute('src')
         if not audio_url:
             print("  [透视雷达] ❌ 无法获取音频 URL")
             return False
             
-        print(f"  [透视雷达] ⬇️ 成功截获音频流流址，正在下载底包...")
+        print(f"  [透视雷达] ⬇️ 成功截获音频流址，正在下载底包...")
         urllib.request.urlretrieve(audio_url, "captcha.mp3")
 
         print("  [透视雷达] 🔄 正在进行音频基因重组 (MP3 -> WAV)...")
         sound = AudioSegment.from_mp3("captcha.mp3")
         sound.export("captcha.wav", format="wav")
 
-        # 4. 离线/云端语音解码
+        # 5. 离线/云端语音解码
         print("  [透视雷达] 🧠 启动神经语音解码...")
         recognizer = sr.Recognizer()
         with sr.AudioFile("captcha.wav") as source:
             audio_data = recognizer.record(source)
             text = recognizer.recognize_google(audio_data)
-            print(f"  [透视雷达] 🎯 解码成功！验证密码为: {text}")
+            print(f"  [透视雷达] 🔓 解码成功！验证密码为: {text}")
 
-        # 5. 回填答案并击穿验证
-        bframe.locator('#audio-response').fill(text)
-        bframe.locator('#recaptcha-verify-button').click()
+        # 6. 回填答案并击穿验证
+        target_frame.locator('#audio-response').fill(text)
+        target_frame.locator('#recaptcha-verify-button').click()
         time.sleep(4)
         return True
 
@@ -151,14 +176,13 @@ def run():
                 
             time.sleep(3) 
             
-            # 检测是否有任何形式的验证码 iframe 处于激活状态
-            if page.locator('iframe[title*="reCAPTCHA"]').is_visible() or page.locator('iframe[title*="recaptcha challenge"]').is_visible():
-                print("⚠️ 探测到防御系统已启动，执行物理硬解方案...")
-                success = solve_audio_captcha(page)
-                if not success:
-                    page.screenshot(path="screenshots/error_captcha.png", full_page=True)
-                    raise Exception("CAPTCHA_FAILED")
+            # 直接调用验证码模块，内部会有动态扫描机制来判断是否真有弹窗
+            success = solve_audio_captcha(page)
+            if not success:
+                page.screenshot(path="screenshots/error_captcha.png", full_page=True)
+                raise Exception("CAPTCHA_FAILED")
             
+            print("⏳ 等待跳转控制台...")
             page.wait_for_url('**/dashboard**', timeout=20000)
             print("🎉 突破大门，成功进入后台！")
             
@@ -177,9 +201,9 @@ def run():
                 print("✅ 成功点击续期！等待最后确认...")
                 time.sleep(5)
                 
-                if page.locator('iframe[title*="recaptcha challenge"]').is_visible():
-                    solve_audio_captcha(page)
-                    time.sleep(5)
+                # 续期时如果弹验证码，再次硬解
+                solve_audio_captcha(page)
+                time.sleep(5)
                     
                 page.screenshot(path="screenshots/success_renew.png", full_page=True)
                 send_telegram_message(f"🎮 Gaming4Free 续期成功！\n账号: {USERNAME}\n状态: 已成功领取 90 分钟！")
