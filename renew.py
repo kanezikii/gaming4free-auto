@@ -80,7 +80,12 @@ def solve_audio_captcha(page):
             return True
 
         print("  [透视雷达] 🎯 锁定目标弹窗！切入音频模式...")
-        audio_btn.click()
+        try:
+            audio_btn.click(force=True, timeout=5000)
+        except Exception as e:
+            print(f"  [透视雷达] ❌ 无法点击耳机图标，弹窗可能已消失: {e}")
+            return False
+            
         time.sleep(2)
 
         error_msg = target_frame.locator('.rc-doscaptcha-header-text')
@@ -108,7 +113,7 @@ def solve_audio_captcha(page):
             print(f"  [透视雷达] 🔓 解码成功！验证密码为: {text}")
 
         target_frame.locator('#audio-response').fill(text)
-        target_frame.locator('#recaptcha-verify-button').click()
+        target_frame.locator('#recaptcha-verify-button').click(force=True)
         time.sleep(4)
         return True
 
@@ -168,44 +173,64 @@ def run():
                 
             time.sleep(3) 
             
-            # 直接调用验证码模块，内部会有动态扫描机制来判断是否真有弹窗
             success = solve_audio_captcha(page)
             if not success:
                 page.screenshot(path="screenshots/error_captcha.png", full_page=True)
                 raise Exception("CAPTCHA_FAILED")
             
-            # ======== 关键修复区 ========
             print("⏳ 等待控制台界面渲染...")
-            # 抛弃死板的 URL 等待，直接等待页面上出现 "My renqi" 这个特征文本
             page.wait_for_selector('text="My renqi"', timeout=20000)
             print("🎉 突破大门，成功进入后台服务器列表！")
             
             print("🖥️ 定位并点击 renqi 服务...")
             page.get_by_text('My renqi', exact=False).first.click()
             page.wait_for_load_state('networkidle')
-            time.sleep(3) # 给进入服务详情页一点缓冲时间
+            time.sleep(3) 
             
-            # 点击 Console 菜单
             print("🎛️ 切换至 Console 面板...")
             page.locator('a').filter(has_text='Console').first.click()
             page.wait_for_load_state('networkidle')
             time.sleep(3)
-            # ============================
             
             print("⏳ 准备续期...")
             renew_btn = page.get_by_role('button', name='ADD 90 MINUTES').first
             
             if renew_btn.is_visible(timeout=5000):
-                renew_btn.click()
-                print("✅ 成功点击续期！等待最后确认...")
-                time.sleep(5)
+                renew_btn.click(force=True)
+                print("✅ 成功点击续期！平台将强行弹出强制广告...")
                 
-                # 续期时如果弹验证码，再次硬解
-                solve_audio_captcha(page)
-                time.sleep(5)
+                # ======== 挂机看广告逻辑 (45秒容错) ========
+                print("⏳ 开启防卡死倒计时，乖乖等待广告播放及网络缓冲 (安全期 45 秒)...")
+                for wait_sec in range(45, 0, -5):
+                    print(f"  -> 📺 广告播放中... 剩余约 {wait_sec} 秒")
+                    time.sleep(5)
+                # ===========================================
+                
+                print("✅ 广告等待期结束！正在侦测是否触发二次验证...")
+                
+                challenge_popped = False
+                for _ in range(10): 
+                    time.sleep(1)
+                    for f in page.frames:
+                        if 'bframe' in f.url or 'recaptcha' in f.url:
+                            try:
+                                if f.locator('#recaptcha-audio-button').is_visible():
+                                    challenge_popped = True
+                                    break
+                            except:
+                                pass
+                    if challenge_popped:
+                        break
+
+                if challenge_popped:
+                    print("⚠️ 广告结束后触发了二次风控，再次启动硬解...")
+                    solve_audio_captcha(page)
+                else:
+                    print("✅ 未检测到二次验证弹窗，时长已顺利到账！")
                     
+                time.sleep(5)
                 page.screenshot(path="screenshots/success_renew.png", full_page=True)
-                send_telegram_message(f"🎮 Gaming4Free 续期成功！\n账号: {USERNAME}\n状态: 已成功领取 90 分钟！")
+                send_telegram_message(f"🎮 Gaming4Free 续期成功！\n账号: {USERNAME}\n状态: 已成功看穿广告并领取 90 分钟！")
                 print("🎉🎉 破阵成功！全流程完美收官！")
             else:
                 print("ℹ️ 未找到可点击的续期按钮，可能在冷却中。")
