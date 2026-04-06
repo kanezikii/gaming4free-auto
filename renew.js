@@ -42,8 +42,6 @@ async function autoSolveCaptcha(page) {
         const frames = page.frames();
         for (const frame of frames) {
             if (frame.url().includes('bframe') || frame.url().includes('fallback')) {
-                
-                // 探测当前状态
                 const status = await frame.evaluate(() => {
                     const errorMsg = document.querySelector('.rc-doscaptcha-header-text'); 
                     if (errorMsg && errorMsg.innerText.includes('Try again later')) return 'blocked';
@@ -67,7 +65,6 @@ async function autoSolveCaptcha(page) {
                     console.log("  [透视雷达] ⚠️ 发现验证码！无 Buster，正在强行切入语音模式...");
                     await page.waitForTimeout(2000); 
                     
-                    // 检查切入语音后是否被拉黑，或者是否有 Buster
                     const retryStatus = await frame.evaluate(() => {
                         const errorMsg = document.querySelector('.rc-doscaptcha-header-text'); 
                         if (errorMsg && errorMsg.innerText.includes('Try again later')) return 'blocked';
@@ -133,43 +130,51 @@ async function autoSolveCaptcha(page) {
         const screenshotDir = path.join(__dirname, 'screenshots');
         if (!fs.existsSync(screenshotDir)) fs.mkdirSync(screenshotDir);
 
-        console.log("🌐 [步骤 3] 直达核心 Panel 面板...");
-        await targetPage.goto('https://panel.gaming4free.net', { waitUntil: 'networkidle', timeout: 60000 });
+        console.log("🌐 [步骤 3] 直达核心 Panel 面板 (等待家宽慢速加载)...");
+        // 🌟 放宽初始加载时间
+        await targetPage.goto('https://panel.gaming4free.net', { waitUntil: 'domcontentloaded', timeout: 90000 });
+        await targetPage.waitForTimeout(5000); // 强行等5秒，让 Cloudflare 盾牌飞一会儿
 
-        console.log("🔒 [步骤 4] 检查登录状态...");
-        try {
-            const emailInput = targetPage.locator('input[name="user"], input[type="email"]').filter({ state: 'visible' }).first();
-            if (await emailInput.isVisible({ timeout: 10000 })) {
-                await emailInput.fill(MC_USERNAME);
-                await targetPage.locator('input[type="password"]').filter({ state: 'visible' }).first().fill(MC_PASSWORD);
-                await targetPage.getByRole('button', { name: /LOGIN|登录|Sign In/i }).filter({ state: 'visible' }).first().click({ force: true });
-                console.log("⏳ 账号密码提交！盯防验证码...");
+        console.log("🔒 [步骤 4] 寻找登录框...");
+        const emailInput = targetPage.locator('input[name="user"], input[type="email"]').filter({ state: 'visible' }).first();
+        
+        // 🌟 核心修复：给家宽代理 45 秒的时间去刷出登录框
+        await emailInput.waitFor({ state: 'visible', timeout: 45000 }).catch(() => {});
 
-                let loginSuccess = false;
-                for (let i = 0; i < 20; i++) { 
-                    if (!targetPage.url().includes('auth/login')) {
-                        loginSuccess = true;
-                        console.log("🎉 验证通过！成功突破大门进入后台！");
-                        break;
-                    }
-                    const capStatus = await autoSolveCaptcha(targetPage);
-                    if (capStatus === 'blocked') {
-                        console.log("🚨 登录时就被拉黑，撤退！");
-                        break;
-                    }
-                    await targetPage.waitForTimeout(2000);
+        if (await emailInput.isVisible()) {
+            console.log(`🔑 成功找到登录框，填入账号: ${MC_USERNAME}`);
+            await emailInput.fill(MC_USERNAME);
+            await targetPage.locator('input[type="password"]').filter({ state: 'visible' }).first().fill(MC_PASSWORD);
+            await targetPage.getByRole('button', { name: /LOGIN|登录|Sign In/i }).filter({ state: 'visible' }).first().click({ force: true });
+            console.log("⏳ 账号密码提交！盯防验证码...");
+
+            let loginSuccess = false;
+            for (let i = 0; i < 20; i++) { 
+                if (!targetPage.url().includes('auth/login')) {
+                    loginSuccess = true;
+                    console.log("🎉 验证通过！成功突破大门进入后台！");
+                    break;
                 }
-                
-                if (!loginSuccess) {
-                     await targetPage.screenshot({ path: path.join(screenshotDir, `retreat_login_${Date.now()}.png`), fullPage: true }).catch(()=>{});
-                     return; 
+                const capStatus = await autoSolveCaptcha(targetPage);
+                if (capStatus === 'blocked') {
+                    console.log("🚨 登录时就被拉黑，撤退！");
+                    break;
                 }
-            } else {
-                console.log("✅ 免密直达后台！");
+                await targetPage.waitForTimeout(2000);
             }
-        } catch (e) {}
+            
+            if (!loginSuccess) {
+                 await targetPage.screenshot({ path: path.join(screenshotDir, `retreat_login_${Date.now()}.png`), fullPage: true }).catch(()=>{});
+                 return; 
+            }
+        } else {
+            // 🌟 核心修复：如果找不到登录框，绝不再自作聪明，直接拍照报警
+            console.log("🚨 [致命错误] 45秒内未加载出登录框！可能是高延迟或被 Cloudflare 拦截。");
+            await targetPage.screenshot({ path: path.join(screenshotDir, `error_nologin_${Date.now()}.png`), fullPage: true }).catch(()=>{});
+            throw new Error("找不到登录页面，无法继续！");
+        }
 
-        console.log("🖥️ [步骤 5] 点击 renqi 服务...");
+        console.log("🖥️ [步骤 5] 正在精确定位并点击你的 renqi 服务...");
         await targetPage.getByText('My renqi', { exact: false }).filter({ state: 'visible' }).first().click({ force: true });
         await targetPage.waitForLoadState('domcontentloaded');
         await targetPage.waitForTimeout(3000); 
@@ -179,11 +184,7 @@ async function autoSolveCaptcha(page) {
         await targetPage.waitForLoadState('domcontentloaded');
         await targetPage.waitForTimeout(3000);
 
-        // ==========================================
-        // 🌟 步骤 7 & 8：广告等待与验证码狙击
-        // ==========================================
         let success = false;
-        
         for (let attempt = 1; attempt <= 2; attempt++) {
             console.log(`⏳ [步骤 7] 准备点击续期按钮... (第 ${attempt} 回合)`);
             const addTimeBtn = targetPage.getByRole('button', { name: /ADD 90 MINUTES/i });
@@ -209,11 +210,10 @@ async function autoSolveCaptcha(page) {
                 await targetPage.waitForTimeout(5000); 
                 if (i % 2 === 0) console.log(`  -> 广告播放/网络加载中... 已耐心等待 ${i * 5} 秒`);
                 
-                // 每次循环都呼叫透视雷达，看看有没有弹验证码
                 const captchaResult = await autoSolveCaptcha(targetPage);
                 if (captchaResult === 'blocked') {
                     ipBlocked = true;
-                    break; // 发现死局，直接跳出等候循环
+                    break; 
                 }
 
                 try {
@@ -229,12 +229,12 @@ async function autoSolveCaptcha(page) {
 
             if (ipBlocked) {
                 console.log("❌ 遭遇 IP 彻底死锁，停止本回合尝试。");
-                break; // 如果 IP 被封了，重试刷新也没用，直接彻底撤退
+                break; 
             }
             if (adFinished) break;
 
             if (attempt === 1 && !ipBlocked) {
-                console.log("⚠️ 150秒过去了，似乎卡死在加载圈 (大概率广告没加载出来)。刷新重试！");
+                console.log("⚠️ 150秒过去了，似乎卡死在加载圈。刷新重试！");
                 await targetPage.reload({ waitUntil: 'domcontentloaded' });
                 await targetPage.waitForTimeout(5000);
             }
