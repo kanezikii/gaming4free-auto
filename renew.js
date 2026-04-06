@@ -119,20 +119,18 @@ async function autoSolveCaptcha(page) {
     }
 
     // ==========================================
-    // 🌟 终极破壁：基因重组 Buster 配置文件，强行开启企业级拦截网注入权限！
+    // 🌟 终极破壁：基因重组 Buster 配置文件
     // ==========================================
     const manifestPath = path.join(busterPath, 'manifest.json');
     try {
         let manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
         let modified = false;
 
-        // 1. 修复 Manifest V3 兼容性
         if (manifest.manifest_version === 3 && manifest.action && !manifest.browser_action) {
             manifest.browser_action = manifest.action;
             modified = true;
         }
 
-        // 2. 强行加入 Enterprise 企业级风控匹配网址
         if (manifest.content_scripts) {
             manifest.content_scripts.forEach(script => {
                 if (script.matches) {
@@ -205,7 +203,8 @@ async function autoSolveCaptcha(page) {
 
         if (pageType === 'login') {
             console.log(`🔑 发现登录框，填入账号...`);
-            await targetPage.locator('input:not([type="hidden"]):not([type="password"])').first().fill(MCUSERNAME);
+            // 🌟 修复了拼写错误，加回了下划线
+            await targetPage.locator('input:not([type="hidden"]):not([type="password"])').first().fill(MC_USERNAME);
             await pwdInput.fill(MC_PASSWORD);
             
             let readyToSolve = false;
