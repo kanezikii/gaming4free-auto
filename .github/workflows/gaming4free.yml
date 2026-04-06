@@ -46,26 +46,25 @@ jobs:
           chmod +x sing-box
           echo "$XRAY_CONFIG" > config.json
           
-          # 后台启动代理并将日志写入 proxy.log
+          # 后台启动 Sing-box 并记录日志
           ./sing-box run -c config.json > proxy.log 2>&1 &
+          echo "等待代理隧道建立..."
           sleep 5
           
           # ==========================================
-          # 🌟 新增：强力代理连通性探针与崩溃日志分析
+          # 🌟 强力探针：测试连通性并打印死亡日志
           # ==========================================
-          echo "正在测试代理隧道连通性..."
           PROXY_IP=$(curl -s -m 10 -x socks5://127.0.0.1:10808 https://api.ipify.org || echo "FAIL")
           
           if [ "$PROXY_IP" = "FAIL" ]; then
             echo "🚨 致命错误：代理隧道建立失败！"
-            echo "可能是动态家宽 IP 已发生变动，或节点配置有误。"
-            echo "👇 打印底层 Sing-box 运行日志供排查 👇"
+            echo "👇 正在打印 Sing-box 崩溃日志，请检查下方报错信息 👇"
             echo "------------------------------------------------"
             cat proxy.log
             echo "------------------------------------------------"
             exit 1
           else
-            echo "💥 代理隧道畅通！当前出口 IP 为: $PROXY_IP"
+            echo "💥 伪装成功！当前出口 IP 为: $PROXY_IP"
           fi
           # ==========================================
 
