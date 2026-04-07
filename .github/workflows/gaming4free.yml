@@ -1,13 +1,10 @@
-name: gaming4free renew (Python + Resi IP)
+name: gaming4free renew (WARP)
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "0 * * * *"
 
-permissions:
-  actions: write
-  contents: read
+  schedule:
+    - cron: "40 * * * *"   # 🕕 每天18:00（UTC）
 
 jobs:
   run:
@@ -15,83 +12,106 @@ jobs:
     timeout-minutes: 15
 
     steps:
+      # =========================
+      # 🟡 0️⃣ 当前仓库
+      # =========================
       - uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      # =========================
+      # 🟡 ⭐ 私有仓库
+      # =========================
+      - name: Checkout private repo
+        uses: actions/checkout@v4
         with:
-          python-version: '3.10'
+          repository: ${{ github.repository_owner }}/gaming4free-auto
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          path: scripts
 
-      - name: Install System Dependencies
+      # =========================
+      # 🟡 Node环境
+      # =========================
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # =========================
+      # 🟡 1️⃣ WARP
+      # =========================
+      - name: 创建WARP网络
+        uses: fscarmen/warp-on-actions@v1.3
+        with:
+          stack: dual
+          mode: client
+
+      # =========================
+      # 🟡 2️⃣ 系统依赖（音频）
+      # =========================
+      - name: Install deps
         run: |
           sudo apt-get update
-          sudo apt-get install -y xvfb wget unzip curl jq p7zip-full pulseaudio alsa-utils ffmpeg
+          sudo apt-get install -y xvfb wget unzip curl jq p7zip-full \
+            pulseaudio alsa-utils ffmpeg
 
-      - name: Setup Audio
-        run: |
           pulseaudio --start --exit-idle-time=-1 || true
+
           pactl load-module module-null-sink sink_name=virtual_speaker || true
           pactl set-default-sink virtual_speaker || true
+
           pactl load-module module-virtual-source source_name=virtual_mic || true
           pactl set-default-source virtual_mic || true
 
-      - name: Start Sing-box Proxy
-        env:
-          XRAY_CONFIG: ${{ secrets.XRAY_CONFIG }}
+      # =========================
+      # 🟡 3️⃣ 安装 Playwright（修复点）
+      # =========================
+      - name: Install playwright
         run: |
-          LATEST_VERSION=$(curl -s https://api.github.com/repos/SagerNet/sing-box/releases/latest | jq -r .tag_name)
-          wget -qO sing-box.tar.gz "https://github.com/SagerNet/sing-box/releases/download/${LATEST_VERSION}/sing-box-${LATEST_VERSION#v}-linux-amd64.tar.gz"
-          tar -xzf sing-box.tar.gz
-          mv sing-box-*/sing-box .
-          chmod +x sing-box
-          echo "$XRAY_CONFIG" > config.json
-          
-          # 后台启动 Sing-box 并记录日志
-          ./sing-box run -c config.json > proxy.log 2>&1 &
-          echo "等待代理隧道建立..."
-          sleep 5
-          
-          # ==========================================
-          # 🌟 强力探针：测试连通性并打印死亡日志
-          # ==========================================
-          PROXY_IP=$(curl -s -m 10 -x socks5://127.0.0.1:10808 https://api.ipify.org || echo "FAIL")
-          
-          if [ "$PROXY_IP" = "FAIL" ]; then
-            echo "🚨 致命错误：代理隧道建立失败！"
-            echo "👇 正在打印 Sing-box 崩溃日志，请检查下方报错信息 👇"
-            echo "------------------------------------------------"
-            cat proxy.log
-            echo "------------------------------------------------"
-            exit 1
-          else
-            echo "💥 伪装成功！当前出口 IP 为: $PROXY_IP"
-          fi
-          # ==========================================
- 
-      - name: Install Python Packages
-        run: |
-          pip install playwright pydub SpeechRecognition requests
-          playwright install chrome
-          
-      - name: Run Python Script
-        run: |
-          mkdir -p screenshots
-          xvfb-run -a python renew.py
+          npm init -y
+          npm install playwright
+          npx playwright install chromium
 
+      # =========================
+      # 🟡 4️⃣ 下载 Buster
+      # =========================
+      - name: Download Buster
+        run: |
+          mkdir -p scripts/extensions/buster
+          wget -O scripts/extensions/buster/buster.zip \
+            https://github.com/dessant/buster/releases/download/v3.1.0/buster_captcha_solver_for_humans-3.1.0-chrome.zip
+
+      - name: Unzip Buster
+        run: |
+          mkdir -p scripts/extensions/buster/unpacked
+          7z x -y scripts/extensions/buster/buster.zip -oscripts/extensions/buster/unpacked
+
+          echo "📦 Buster 解压完成"
+          ls -R scripts/extensions/buster/unpacked | head -50
+
+      # =========================
+      # 🟡 5️⃣ 调试 IP
+      # =========================
+      - name: Check IP
+        run: |
+          echo "🌍 当前 IP:"
+          curl -s https://api.ipify.org
+          echo
+          curl -s https://ipinfo.io
+
+      # =========================
+      # 🟡 6️⃣ 运行脚本
+      # =========================
+      - name: Run script
+        run: |
+          mkdir -p scripts/screenshots
+          xvfb-run -a node scripts/renew.js
+
+      # =========================
+      # 🟡 7️⃣ 上传截图
+      # =========================
       - name: Upload screenshots
         uses: actions/upload-artifact@v4
         if: always()
         with:
           name: screenshots
-          path: screenshots/**
-          retention-days: 1
+          path: scripts/screenshots/**
           if-no-files-found: warn
-
-      - name: Delete old workflow runs
-        uses: Mattraks/delete-workflow-runs@v2
-        if: always()
-        with:
-          token: ${{ github.token }}
-          repository: ${{ github.repository }}
-          retain_days: 0
-          keep_minimum_runs: 3
