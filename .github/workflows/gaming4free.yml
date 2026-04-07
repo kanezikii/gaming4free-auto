@@ -101,6 +101,11 @@ jobs:
       # 🟡 6️⃣ 运行脚本
       # =========================
       - name: Run script
+        env:
+          USERNAME: ${{ secrets.MC_USERNAME }}
+          PASSWORD: ${{ secrets.MC_PASSWORD }}
+          TG_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT: ${{ secrets.TG_CHAT_ID }}
         run: |
           mkdir -p scripts/screenshots
           xvfb-run -a node scripts/renew.js
