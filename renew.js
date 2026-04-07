@@ -1,38 +1,39 @@
 const { chromium } = require('playwright');
 const path = require('path');
-const fs = require('fs');
 
-// 💡 配置项：优先读取环境变量 (GitHub Secrets)，如果没有则使用后面写死的默认值
-const USERNAME = process.env.USERNAME || 'peng320829@gmail.com';
-const PASSWORD = process.env.PASSWORD || 'Qwer12138@';
-const TG_TOKEN = process.env.TG_TOKEN || '8490493179:AAG1Q5pkFNkUzR2E5pSm8OpJa_SPZNf32Mw';
-const TG_CHAT = process.env.TG_CHAT || '6499138234';
+// ==========================================
+// 💡 核心配置
+// ==========================================
+const RENEW_URL = 'https://game4free.net/woairenqi'; 
+// 从 GitHub Secrets 读取游戏用户名，如果没有则默认填 'woairenqi'
+const MC_USERNAME = process.env.MC_USERNAME || 'woairenqi'; 
 
-// TG 消息推送函数
+const TG_TOKEN = process.env.TG_TOKEN || '';
+const TG_CHAT = process.env.TG_CHAT || '';
+
+// TG 通知发送函数
 async function sendTG(message) {
     if (!TG_TOKEN || !TG_CHAT) return;
     try {
-        const url = `https://api.telegram.org/bot${TG_TOKEN}/sendMessage`;
-        await fetch(url, {
+        await fetch(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ chat_id: TG_CHAT, text: `🤖 Gaming4Free Auto:\n${message}` })
+            body: JSON.stringify({ chat_id: TG_CHAT, text: `🤖 G4F 自动续期:\n${message}` })
         });
-        console.log("📨 TG 通知发送成功");
     } catch (e) {
-        console.error("❌ TG 通知发送失败:", e.message);
+        console.error("TG 通知发送失败");
     }
 }
 
-// Buster 插件解压后的绝对路径
 const extensionPath = path.resolve(__dirname, 'extensions/buster/unpacked');
 
 (async () => {
-    console.log(`\n===== RUN AUTOMATION =====`);
-    console.log(`👤 尝试登录账号: ${USERNAME}`);
+    console.log(`\n===== 🚀 开始执行极速续期 =====`);
+    console.log(`🎯 目标 URL: ${RENEW_URL}`);
+    console.log(`👤 填入用户名: ${MC_USERNAME}`);
 
     const browserContext = await chromium.launchPersistentContext('', {
-        headless: false, // 必须 false，配合 actions 的 xvfb 虚拟屏幕运行
+        headless: false, 
         args: [
             `--disable-extensions-except=${extensionPath}`,
             `--load-extension=${extensionPath}`,
@@ -44,77 +45,69 @@ const extensionPath = path.resolve(__dirname, 'extensions/buster/unpacked');
     });
 
     const page = await browserContext.newPage();
-    console.log("🧩 Buster 插件已挂载");
 
     try {
-        // 1. 访问登录页
-        await page.goto('https://panel.gaming4free.net/auth/login', { waitUntil: 'networkidle', timeout: 30000 });
+        // 1. 访问专属续期页面
+        await page.goto(RENEW_URL, { waitUntil: 'networkidle', timeout: 30000 });
         await page.screenshot({ path: path.join(__dirname, `screenshots/1_open.png`) });
+        console.log("🌐 已成功打开专属续期页面");
 
-        // 2. 填写账号密码 (使用更强大的兼容性定位器)
-        // 查找 name 属性为 username 或普通文本输入框
-        const userField = page.locator('input[name="username"], input[name="email"], input[type="text"]').first();
-        // 显式等待输入框出现，最多等 15 秒
-        await userField.waitFor({ state: 'visible', timeout: 15000 }); 
-        await userField.fill(USERNAME);
+        // 2. 识别并破解 reCAPTCHA
+        console.log("🤖 正在处理 reCAPTCHA 人机验证...");
+        const captchaFrame = page.frameLocator('iframe[title*="reCAPTCHA"]');
+        
+        // 等待复选框出现并点击
+        await captchaFrame.locator('.recaptcha-checkbox-border').waitFor({ state: 'visible', timeout: 10000 });
+        await captchaFrame.locator('.recaptcha-checkbox-border').click(); 
+        
+        await page.waitForTimeout(2000); 
 
-        const passField = page.locator('input[name="password"], input[type="password"]').first();
-        await passField.fill(PASSWORD);
-        console.log("✍️ 账号密码已填充");
-
-        // 3. 点击登录按钮
-        await page.getByRole('button', { name: /login/i }).click();
-        
-        // 4. 等待验证码弹窗出现
-        console.log("🤖 正在检测 reCAPTCHA 挑战...");
-        await page.waitForTimeout(3000); // 留出时间让 iframe 弹出来
-        
-        // 定位 reCAPTCHA 弹窗的 iframe (包含九宫格和 Buster 按钮的 iframe)
-        const bframe = page.frameLocator('iframe[src*="recaptcha/api2/bframe"]');
-        
-        // 检查是否弹出了验证码
-        if (await bframe.locator('#recaptcha-audio-button').isVisible().catch(()=>false)) {
-            console.log("🔄 检测到验证码，准备使用 Buster...");
+        // 切换到弹出的图片/语音挑战 iframe
+        const challengeFrame = page.frameLocator('iframe[title*="recaptcha challenge"]');
+        if (await challengeFrame.locator('.help-button-holder').isVisible({ timeout: 5000 }).catch(()=>false)) {
+            console.log("🔄 触发 Buster 语音破解插件...");
+            await challengeFrame.locator('.help-button-holder').click();
             
-            // 点击切换到音频验证 (Buster 会自动接管)
-            await bframe.locator('#recaptcha-audio-button').click();
-            await page.waitForTimeout(1000);
-            
-            console.log("🖱️ 点击 Buster 破解按钮");
-            // 点击 Buster 注入的橙色小人/播放按钮
-            await bframe.locator('.help-button-holder').click();
-            
-            // 等待验证完成的标志
+            // 给 Buster 留出足够的语音识别时间
             await page.waitForTimeout(8000); 
-            console.log("✅ 验证码处理完成");
-            await page.screenshot({ path: path.join(__dirname, `screenshots/2_captcha_solved.png`) });
+            console.log("✅ 验证码破解完成");
+        } else {
+            console.log("⏩ 运气不错，未弹出二次验证，直接绿勾通过！");
+        }
+
+        // 3. 填写游戏用户名
+        await page.getByPlaceholder(/Minecraft Username/i).fill(MC_USERNAME);
+        console.log("✍️ 已填写用户名");
+        await page.screenshot({ path: path.join(__dirname, `screenshots/2_filled.png`) });
+
+        // 4. 点击 Renew 按钮
+        console.log("🚀 准备提交续期请求...");
+        const renewBtn = page.getByRole('button', { name: 'Renew', exact: true });
+        
+        if (await renewBtn.isEnabled({ timeout: 5000 })) {
+            await renewBtn.click();
             
-            // 再次点击登录 (如果验证码完成后没有自动跳转)
-            if (await page.getByRole('button', { name: /login/i }).isVisible().catch(()=>false)) {
-                 await page.getByRole('button', { name: /login/i }).click();
+            // 等待页面反馈结果
+            await page.waitForTimeout(5000); 
+            await page.screenshot({ path: path.join(__dirname, `screenshots/3_result.png`) });
+            
+            // 验证是否出现了绿色的成功提示
+            if (await page.locator('text="The server has been renewed."').isVisible().catch(()=>false)) {
+                console.log("🎉 续期大成功！");
+                await sendTG(`✅ 服务器续期成功！\n专属页面: ${RENEW_URL}\n时间: ${new Date().toLocaleString()}`);
+            } else {
+                console.log("⚠️ 点击了按钮，但没检测到绿色成功横幅，请检查 3_result.png 确认实际状态");
+                await sendTG(`⚠️ 续期已执行，结果未知，请查阅 GitHub 截图。\n时间: ${new Date().toLocaleString()}`);
             }
         } else {
-            console.log("⏩ 未弹出验证码，直接进入下一步");
+            console.log("⏸️ Renew 按钮当前不可点击 (可能在冷却中，尚未到期)");
+            await sendTG(`ℹ️ 续期跳过，按钮置灰（尚未到期）。\n时间: ${new Date().toLocaleString()}`);
         }
-
-        // 5. 等待页面跳转（登录成功或进入控制台面板）
-        await page.waitForLoadState('networkidle');
-        await page.waitForTimeout(5000);
-        await page.screenshot({ path: path.join(__dirname, `screenshots/3_done.png`) });
-        
-        // 根据页面 URL 判断是否成功 (你可能需要根据实际控制台地址微调)
-        const currentUrl = page.url();
-        if (currentUrl.includes('login')) {
-            throw new Error('登录失败，仍然停留在登录页，请查看截图');
-        }
-
-        console.log("🚀 续期/登录成功!");
-        await sendTG(`✅ 账号 ${USERNAME} 续期/登录成功！\n时间: ${new Date().toLocaleString()}`);
 
     } catch (error) {
         console.error("❌ 发生错误:", error);
         await page.screenshot({ path: path.join(__dirname, `screenshots/error.png`) });
-        await sendTG(`❌ 账号 ${USERNAME} 续期失败！\n错误信息: ${error.message}`);
+        await sendTG(`❌ 自动续期失败！\n错误信息: ${error.message}`);
     } finally {
         await browserContext.close();
     }
