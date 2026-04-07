@@ -102,8 +102,7 @@ jobs:
       # =========================
       - name: Run script
         env:
-          USERNAME: ${{ secrets.MC_USERNAME }}
-          PASSWORD: ${{ secrets.MC_PASSWORD }}
+          MC_USERNAME: ${{ secrets.MC_USERNAME }}
           TG_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT: ${{ secrets.TG_CHAT_ID }}
         run: |
