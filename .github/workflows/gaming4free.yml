@@ -2,9 +2,8 @@ name: gaming4free renew (WARP)
 
 on:
   workflow_dispatch:
-
   schedule:
-    - cron: "*/60 * * * *"   # 🕕 每天18:00（UTC）
+    - cron: "40 * * * *"   # 🕕 每天18:00（UTC）
 
 jobs:
   run:
@@ -13,22 +12,12 @@ jobs:
 
     steps:
       # =========================
-      # 🟡 0️⃣ 当前仓库
+      # 🟡 0️⃣ 拉取当前仓库代码
       # =========================
       - uses: actions/checkout@v4
 
       # =========================
-      # 🟡 ⭐ 私有仓库
-      # =========================
-      - name: Checkout private repo
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ github.repository_owner }}/gaming4free-auto
-          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
-          path: scripts
-
-      # =========================
-      # 🟡 Node环境
+      # 🟡 1️⃣ Node环境
       # =========================
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -36,7 +25,7 @@ jobs:
           node-version: 20
 
       # =========================
-      # 🟡 1️⃣ WARP
+      # 🟡 2️⃣ WARP (解决 IP 限制)
       # =========================
       - name: 创建WARP网络
         uses: fscarmen/warp-on-actions@v1.3
@@ -45,7 +34,7 @@ jobs:
           mode: client
 
       # =========================
-      # 🟡 2️⃣ 系统依赖（音频）
+      # 🟡 3️⃣ 系统依赖（音频/虚拟屏幕）
       # =========================
       - name: Install deps
         run: |
@@ -62,60 +51,48 @@ jobs:
           pactl set-default-source virtual_mic || true
 
       # =========================
-      # 🟡 3️⃣ 安装 Playwright（修复点）
+      # 🟡 4️⃣ 安装 Playwright
       # =========================
       - name: Install playwright
         run: |
+          # 如果你的仓库里已经有 package.json，这里直接 npm install 也可以
           npm init -y
           npm install playwright
           npx playwright install chromium
 
       # =========================
-      # 🟡 4️⃣ 下载 Buster
+      # 🟡 5️⃣ 下载并解压 Buster 插件
       # =========================
-      - name: Download Buster
+      - name: Download and Unzip Buster
         run: |
-          mkdir -p scripts/extensions/buster
-          wget -O scripts/extensions/buster/buster.zip \
+          mkdir -p extensions/buster
+          wget -O extensions/buster/buster.zip \
             https://github.com/dessant/buster/releases/download/v3.1.0/buster_captcha_solver_for_humans-3.1.0-chrome.zip
-
-      - name: Unzip Buster
-        run: |
-          mkdir -p scripts/extensions/buster/unpacked
-          7z x -y scripts/extensions/buster/buster.zip -oscripts/extensions/buster/unpacked
+          
+          mkdir -p extensions/buster/unpacked
+          7z x -y extensions/buster/buster.zip -oextensions/buster/unpacked
 
           echo "📦 Buster 解压完成"
-          ls -R scripts/extensions/buster/unpacked | head -50
 
       # =========================
-      # 🟡 5️⃣ 调试 IP
-      # =========================
-      - name: Check IP
-        run: |
-          echo "🌍 当前 IP:"
-          curl -s https://api.ipify.org
-          echo
-          curl -s https://ipinfo.io
-
-      # =========================
-      # 🟡 6️⃣ 运行脚本
+      # 🟡 6️⃣ 运行核心续期脚本
       # =========================
       - name: Run script
         env:
           MC_USERNAME: ${{ secrets.MC_USERNAME }}
           TG_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
-          TG_CHAT: ${{ secrets.TG_CHAT_ID }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
         run: |
-          mkdir -p scripts/screenshots
-          xvfb-run -a node scripts/renew.js
+          mkdir -p screenshots
+          xvfb-run -a node renew.js
 
       # =========================
-      # 🟡 7️⃣ 上传截图
+      # 🟡 7️⃣ 上传运行截图
       # =========================
       - name: Upload screenshots
         uses: actions/upload-artifact@v4
         if: always()
         with:
           name: screenshots
-          path: scripts/screenshots/**
+          path: screenshots/**
           if-no-files-found: warn
