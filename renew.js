@@ -5,11 +5,10 @@ const path = require('path');
 // 💡 核心配置
 // ==========================================
 const RENEW_URL = 'https://game4free.net/woairenqi'; 
-// 🌟 核心修复：强制写死服务器名称，不再读取环境变量，防止被邮箱覆盖
-const MC_USERNAME = 'My renqi'; 
+const MC_USERNAME = 'renqi'; 
 
 const TG_TOKEN = process.env.TG_TOKEN || '';
-const TG_CHAT = process.env.TG_CHAT || '';
+const TG_CHAT = process.env.TG_CHAT_ID || '';
 
 // TG 通知发送函数
 async function sendTG(message) {
@@ -30,7 +29,7 @@ const extensionPath = path.resolve(__dirname, 'extensions/buster/unpacked');
 (async () => {
     console.log(`\n===== 🚀 开始执行极速续期 =====`);
     console.log(`🎯 目标 URL: ${RENEW_URL}`);
-    console.log(`👤 强制填入名称: ${MC_USERNAME}`);
+    console.log(`👤 填入服务器名: ${MC_USERNAME}`);
 
     const browserContext = await chromium.launchPersistentContext('', {
         headless: false, 
@@ -70,8 +69,22 @@ const extensionPath = path.resolve(__dirname, 'extensions/buster/unpacked');
                 if (await challengeFrame.locator('.help-button-holder').isVisible({ timeout: 5000 })) {
                     console.log("🔄 触发 Buster 语音破解插件...");
                     await challengeFrame.locator('.help-button-holder').click({ force: true });
-                    await page.waitForTimeout(8000); 
-                    console.log("✅ Buster 破解流程执行完毕");
+                    
+                    console.log("⏳ 正在等待 Buster 识别语音 (最多等待 30 秒)...");
+                    // 🌟 核心修复：智能轮询等待绿勾
+                    let solved = false;
+                    for (let i = 0; i < 15; i++) {
+                        await page.waitForTimeout(2000); // 每次等2秒
+                        let check = await anchor.getAttribute('aria-checked').catch(() => 'false');
+                        if (check === 'true') {
+                            console.log("✅ Buster 破解成功！");
+                            solved = true;
+                            break;
+                        }
+                    }
+                    if (!solved) {
+                        console.log("⚠️ Buster 破解耗时过长或失败，继续尝试兜底流程...");
+                    }
                 }
             } catch (err) {
                 console.log("⚠️ 未能点击 Buster 按钮，继续尝试...");
