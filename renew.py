@@ -89,8 +89,8 @@ with SB(uc=True, proxy=proxy_str, headless=False) as sb:
                         print("❌ 未能获取到音频链接。")
             else:
                 print("❌ 当前 IP 无法加载音频，可能被 Google 临时屏蔽。")
-        
-       # 验证结束，彻底切回最外层，准备填表单
+           
+        # 验证结束，彻底切回最外层
         sb.switch_to_default_content()
         print(f"✍️ 填入服务器名: {MC_USERNAME}")
         # 定位唯一的文本输入框
@@ -99,10 +99,10 @@ with SB(uc=True, proxy=proxy_str, headless=False) as sb:
         os.makedirs("screenshots", exist_ok=True)
         sb.save_screenshot("screenshots/1_filled.png")
 
-        print("🚀 提交续期请求...")
+        print("🚀 准备点击提交...")
         try:
-            # 🌟 核心杀手锏：使用无视标签的“地毯式” XPath 搜索！
-            # 无论是 <button>, <input>, 还是 <a>, 只要它写着 Renew 或者 value 是 Renew，统统按下！
+            # 🌟 核心杀手锏：使用无视标签类型的“地毯式” XPath 选择器！
+            # 无论是 <button>, <input>, 还是 <a>，只要写着 Renew 或者 value 是 Renew，统统按下！
             sb.click('xpath=//*[contains(text(), "Renew") or @value="Renew"]', timeout=10)
             print("🖱️ 成功点击 Renew 按钮！")
             
@@ -110,10 +110,11 @@ with SB(uc=True, proxy=proxy_str, headless=False) as sb:
             sb.sleep(5)
             sb.save_screenshot("screenshots/2_result.png")
 
+            # 🌟 使用更加安全的文本检测 API
             if sb.is_text_visible("The server has been renewed."):
                 print("🎉 读取到成功提示: The server has been renewed.")
                 print("✅ 续期大成功！")
-                send_tg(f"✅ 服务器 [{MC_USERNAME}] 续期成功！(WARP IP)")
+                send_tg(f"✅ 服务器 [{MC_USERNAME}] 续期成功！")
             else:
                 print("⚠️ 按钮已点，但未读取到成功横幅，请查阅截图确认。")
                 send_tg(f"⚠️ 续期已执行，请查阅截图确认状态。")
