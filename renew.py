@@ -14,7 +14,7 @@ TG_CHAT = os.getenv("TG_CHAT_ID", "")
 def send_tg(msg):
     if TG_TOKEN and TG_CHAT:
         try:
-            url = f"https://api.telegram.org/bot${TG_TOKEN}/sendMessage"
+            url = f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage"
             data = json.dumps({"chat_id": TG_CHAT, "text": f"🤖 G4F 自动续期:\n{msg}"}).encode('utf-8')
             req = urllib.request.Request(url, data=data, headers={'Content-Type': 'application/json'})
             urllib.request.urlopen(req, timeout=10)
@@ -23,12 +23,12 @@ def send_tg(msg):
 
 print(f"\n===== 🚀 开始执行极速续期 (WARP + Python 终极版) =====")
 
-# 🌟 修复：删除了 proxy_str 变量定义
+# 🌟 必须加回来：指定本地 WARP SOCKS5 代理
+proxy_str = "socks5://127.0.0.1:40000"
 
-# 🌟 修复：去掉了 proxy 参数，直接走全局网络
-with SB(uc=True, headless=False) as sb:
+with SB(uc=True, proxy=proxy_str, headless=False) as sb:
     try:
-        print("🌐 正在通过全局 WARP 访问目标...")
+        print("🌐 正在通过 WARP SOCKS5 代理访问目标...")
         sb.open(TARGET_URL)
         sb.sleep(2)
 
@@ -59,8 +59,10 @@ with SB(uc=True, headless=False) as sb:
                     print("❌ 抽到“黑人” IP，Google 拒绝下发音频。等待下次换 IP 自动重试。")
                 else:
                     print("📥 正在抓取音频数据流...")
-                    audio_src = sb.get_attribute('#audio-source', 'src') if sb.is_element_visible('#audio-source') else None
-                    if not audio_src and sb.is_element_visible('.rc-audiochallenge-tdownload-link'):
+                    audio_src = None
+                    if sb.is_element_visible('#audio-source'):
+                        audio_src = sb.get_attribute('#audio-source', 'src')
+                    elif sb.is_element_visible('.rc-audiochallenge-tdownload-link'):
                         audio_src = sb.get_attribute('.rc-audiochallenge-tdownload-link', 'href')
 
                     if audio_src:
@@ -72,12 +74,19 @@ with SB(uc=True, headless=False) as sb:
                         r = sr.Recognizer()
                         with sr.AudioFile('payload.wav') as source:
                             audio_data = r.record(source)
-                        text = r.recognize_google(audio_data)
-                        print(f"✅ 识别成功: [{text}]")
-                        
-                        sb.type('#audio-response', text)
-                        sb.click('#recaptcha-verify-button')
-                        sb.sleep(4)
+                        try:
+                            text = r.recognize_google(audio_data)
+                            print(f"✅ 识别成功: [{text}]")
+                            
+                            sb.type('#audio-response', text)
+                            sb.click('#recaptcha-verify-button')
+                            sb.sleep(4)
+                        except sr.UnknownValueError:
+                            print("❌ 引擎无法识别音频内容。")
+                        except sr.RequestError as e:
+                            print(f"❌ 语音引擎请求错误: {e}")
+                    else:
+                        print("❌ 未能获取到音频链接。")
             else:
                 print("❌ 当前 IP 无法加载音频，可能被 Google 临时屏蔽。")
 
@@ -104,4 +113,5 @@ with SB(uc=True, headless=False) as sb:
 
     except Exception as e:
         print(f"❌ 运行异常: {e}")
+        os.makedirs("screenshots", exist_ok=True)
         sb.save_screenshot("screenshots/error.png")
