@@ -18,8 +18,8 @@ jobs:
         with:
           node-version: 20
 
-      # =========================
-      # 🟡 1️⃣ 下载并运行 Xray 专属代理 (替代 WARP)
+     # =========================
+      # 🟡 1️⃣ 下载并运行 Xray 专属代理
       # =========================
       - name: Setup Xray Proxy
         env:
@@ -27,24 +27,33 @@ jobs:
         run: |
           mkdir -p xray-core
           cd xray-core
+          
           # 下载官方 Xray
           wget -qO xray.zip https://github.com/XTLS/Xray-core/releases/download/v1.8.9/Xray-linux-64.zip
           unzip -q xray.zip
           chmod +x xray
           
-          # 将你的 JSON 写入配置文件
+          # 写入配置文件
           echo "$XRAY_CONFIG" > config.json
           
-          # 后台静默运行 Xray
-          nohup ./xray -c config.json > xray.log 2>&1 &
+          # 🌟 修复：使用标准的 run 指令后台启动
+          nohup ./xray run -c config.json > xray.log 2>&1 &
           
-          # 等待 3 秒让 Xray 连上节点
+          # 等待 3 秒
           sleep 3
           
+          # 🌟 修复：开启天眼，如果 Xray 进程不存在，直接打印报错日志！
+          if ! pgrep -x "xray" > /dev/null; then
+            echo "❌ 糟糕！Xray 启动闪退了，以下是死亡原因："
+            cat xray.log
+            exit 1
+          fi
+          
+          echo "✅ Xray 进程在后台运行正常！"
           echo "🌍 本机直连 IP:"
-          curl -s https://api.ipify.org
-          echo -e "\n\n🚀 Xray 代理后 IP (确认是否变为了你的节点IP):"
-          curl -s -x socks5://127.0.0.1:10808 https://api.ipify.org
+          curl -s https://api.ipify.org || echo "直连查询失败"
+          echo -e "\n\n🚀 Xray 代理后 IP:"
+          curl -s -x socks5://127.0.0.1:10808 https://api.ipify.org || echo "代理查询失败"
           echo ""
 
       # =========================
