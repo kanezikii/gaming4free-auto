@@ -8,7 +8,7 @@ const RENEW_URL = 'https://game4free.net/woairenqi';
 const MC_USERNAME = 'renqi'; 
 
 const TG_TOKEN = process.env.TG_TOKEN || '';
-const TG_CHAT = process.env.TG_CHAT_ID || '';
+const TG_CHAT = process.env.TG_CHAT_ID || ''; // 对应 yml 里的名字
 
 // TG 通知发送函数
 async function sendTG(message) {
@@ -32,6 +32,7 @@ const extensionPath = path.resolve(__dirname, 'extensions/buster/unpacked');
     console.log(`👤 填入服务器名: ${MC_USERNAME}`);
 
     const browserContext = await chromium.launchPersistentContext('', {
+        channel: 'chrome', // 🌟 修复 1：强制使用 GitHub 自带的完整版 Google Chrome，自带全部音频解码器！
         headless: false, 
         args: [
             `--disable-extensions-except=${extensionPath}`,
@@ -39,7 +40,8 @@ const extensionPath = path.resolve(__dirname, 'extensions/buster/unpacked');
             '--no-sandbox',
             '--disable-dev-shm-usage',
             '--use-fake-ui-for-media-stream',
-            '--use-fake-device-for-media-stream'
+            '--use-fake-device-for-media-stream',
+            '--autoplay-policy=no-user-gesture-required' // 🌟 修复 2：解除浏览器自动播放限制，允许语音直接播放
         ]
     });
 
@@ -66,15 +68,25 @@ const extensionPath = path.resolve(__dirname, 'extensions/buster/unpacked');
         } else {
             const challengeFrame = page.frameLocator('iframe[title*="recaptcha challenge"]');
             try {
-                if (await challengeFrame.locator('.help-button-holder').isVisible({ timeout: 5000 })) {
+                // 🌟 修复 3.1：确保处于“语音挑战”模式（如果弹出的是图片，先点耳机图标切成语音）
+                const audioBtn = challengeFrame.locator('#recaptcha-audio-button');
+                if (await audioBtn.isVisible({ timeout: 5000 })) {
+                    console.log("🎧 点击耳机图标，切换到语音验证模式...");
+                    await audioBtn.click({ force: true });
+                    await page.waitForTimeout(2000); // 等待语音界面加载
+                }
+
+                // 🌟 修复 3.2：精准定位并触发 Buster 的破解按钮
+                const busterBtn = challengeFrame.locator('#solver-button').first();
+                if (await busterBtn.isVisible({ timeout: 5000 })) {
                     console.log("🔄 触发 Buster 语音破解插件...");
-                    await challengeFrame.locator('.help-button-holder').click({ force: true });
+                    // 使用 evaluate 强制执行原生 JS 点击，防止任何 UI 遮挡导致点击失效
+                    await busterBtn.evaluate(b => b.click());
                     
-                    console.log("⏳ 正在等待 Buster 识别语音 (最多等待 30 秒)...");
-                    // 🌟 核心修复：智能轮询等待绿勾
+                    console.log("⏳ 正在等待 Buster 识别语音 (最多轮询 30 秒)...");
                     let solved = false;
                     for (let i = 0; i < 15; i++) {
-                        await page.waitForTimeout(2000); // 每次等2秒
+                        await page.waitForTimeout(2000); 
                         let check = await anchor.getAttribute('aria-checked').catch(() => 'false');
                         if (check === 'true') {
                             console.log("✅ Buster 破解成功！");
@@ -83,11 +95,13 @@ const extensionPath = path.resolve(__dirname, 'extensions/buster/unpacked');
                         }
                     }
                     if (!solved) {
-                        console.log("⚠️ Buster 破解耗时过长或失败，继续尝试兜底流程...");
+                        console.log("⚠️ Buster 破解超时或被 Google 拦截，继续兜底流程...");
                     }
+                } else {
+                     console.log("⚠️ 找不到 Buster 破解按钮，页面可能加载异常。");
                 }
             } catch (err) {
-                console.log("⚠️ 未能点击 Buster 按钮，继续尝试...");
+                console.log("⚠️ 验证码弹窗处理异常，继续尝试下文...", err.message);
             }
         }
 
