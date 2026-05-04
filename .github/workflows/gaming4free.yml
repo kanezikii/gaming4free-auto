@@ -3,7 +3,7 @@ name: gaming4free renew (WARP + Python)
 on:
   workflow_dispatch:
   schedule:
-    - cron: "40 * * * *"   # 每小时运行一次，增加“抽卡”机会
+    - cron: "40 * * * *"   # 每小时抽卡一次
 
 jobs:
   run:
@@ -13,14 +13,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-     # =========================
-      # 🟡 1️⃣ 启动 WARP 全局动态 IP
+      # =========================
+      # 🟡 1️⃣ 启动 WARP 客户端模式 (SOCKS5)
       # =========================
       - name: Setup WARP
         uses: fscarmen/warp-on-actions@v1.3
         with:
           stack: dual
-          # 🌟 修复：删除了 mode: client，直接使用默认的全局接管模式
+          mode: client # 🌟 核心保命符：必须加上，否则 Github 会断网失联！
 
       - name: Install system deps
         run: |
@@ -47,10 +47,14 @@ jobs:
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
         run: |
           mkdir -p screenshots
-          # 🌟 修复：去掉 -x socks5 参数，直接测全局 IP
-          echo "🌍 当前全局出口 IP (应为 Cloudflare WARP IP):"
-          curl -s https://api.ipify.org
+          
+          echo "⏳ 等待 WARP 隧道建立 (等待10秒)..."
+          sleep 10
+          
+          echo "🌍 验证 WARP SOCKS5 代理 IP:"
+          curl -s -x socks5://127.0.0.1:40000 https://api.ipify.org
           echo ""
+          
           xvfb-run -a python renew.py
           
       - name: Upload screenshots
@@ -59,3 +63,4 @@ jobs:
         with:
           name: screenshots
           path: screenshots/**
+          if-no-files-found: warn
