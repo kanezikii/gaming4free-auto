@@ -90,37 +90,37 @@ with SB(uc=True, proxy=proxy_str, headless=False) as sb:
             else:
                 print("❌ 当前 IP 无法加载音频，可能被 Google 临时屏蔽。")
            
-        # 验证结束，彻底切回最外层
+        # 验证结束，彻底切回最外层，准备填表单
         sb.switch_to_default_content()
         print(f"✍️ 填入服务器名: {MC_USERNAME}")
-        # 定位唯一的文本输入框
+        
+        # 填入用户名
         sb.type('input[type="text"]', MC_USERNAME)
 
         os.makedirs("screenshots", exist_ok=True)
         sb.save_screenshot("screenshots/1_filled.png")
 
-        print("🚀 准备点击提交...")
+        print("🚀 提交续期请求...")
         try:
-            # 🌟 核心杀手锏：使用无视标签类型的“地毯式” XPath 选择器！
-            # 无论是 <button>, <input>, 还是 <a>，只要写着 Renew 或者 value 是 Renew，统统按下！
-            sb.click('xpath=//*[contains(text(), "Renew") or @value="Renew"]', timeout=10)
-            print("🖱️ 成功点击 Renew 按钮！")
+            # 🌟 核心杀手锏：利用 F12 扒出的绝对 ID，配合你提议的“强制模拟鼠标点击”
+            sb.wait_for_element('#submit-button', timeout=10)
+            sb.js_click('#submit-button') # JavaScript 强制穿透模拟点击，神挡杀神！
+            print("🖱️ 成功执行模拟点击 Renew 按钮！")
             
             print("⏳ 等待服务器响应...")
             sb.sleep(5)
             sb.save_screenshot("screenshots/2_result.png")
 
-            # 🌟 使用更加安全的文本检测 API
             if sb.is_text_visible("The server has been renewed."):
                 print("🎉 读取到成功提示: The server has been renewed.")
                 print("✅ 续期大成功！")
-                send_tg(f"✅ 服务器 [{MC_USERNAME}] 续期成功！")
+                send_tg(f"✅ 服务器 [{MC_USERNAME}] 续期成功！(WARP IP)")
             else:
                 print("⚠️ 按钮已点，但未读取到成功横幅，请查阅截图确认。")
                 send_tg(f"⚠️ 续期已执行，请查阅截图确认状态。")
         except Exception as e:
             print(f"❌ 页面未出现可点击的 Renew 按钮或点击超时: {e}")
-            send_tg(f"❌ 续期跳过：无法点击 Renew。")
+            send_tg(f"❌ 续期跳过：无法定位并点击 Renew 按钮。")
 
     except Exception as e:
         print(f"❌ 发生致命错误: {e}")
