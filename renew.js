@@ -31,22 +31,18 @@ const extensionPath = path.resolve(__dirname, 'extensions/buster/unpacked');
     console.log(`🎯 目标 URL: ${RENEW_URL}`);
     console.log(`👤 填入服务器名: ${MC_USERNAME}`);
 
-    // 🌟 回归初心
     const browserContext = await chromium.launchPersistentContext('', {
-        channel: 'chrome', 
         headless: false, 
-        // 🌟 核心破局点：让 Chrome 强制走 Xray 的本地代理端口
-        proxy: {
-            server: 'socks5://127.0.0.1:10808'
-        },
+        // 🌟 核心修复 1：废弃霸道的 proxy 对象，改用原生 args 传递代理，并绕过本地环回！
         args: [
+            `--proxy-server=socks5://127.0.0.1:10808`,
+            `--proxy-bypass-list=<-loopback>,127.0.0.1,localhost`, // 保护 Buster 扩展免受代理干扰
             `--disable-extensions-except=${extensionPath}`,
             `--load-extension=${extensionPath}`,
             '--no-sandbox',
             '--disable-dev-shm-usage',
             '--use-fake-ui-for-media-stream',
-            '--use-fake-device-for-media-stream',
-            '--autoplay-policy=no-user-gesture-required'
+            '--use-fake-device-for-media-stream'
         ]
     });
 
@@ -73,25 +69,23 @@ const extensionPath = path.resolve(__dirname, 'extensions/buster/unpacked');
         } else {
             const challengeFrame = page.frameLocator('iframe[title*="recaptcha challenge"]');
             try {
-                // 🌟 防御：如果是图片验证码，先点击耳机图标切换到语音模式
                 const audioBtn = challengeFrame.locator('#recaptcha-audio-button');
-                if (await audioBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+                if (await audioBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
                     console.log("🎧 切换到语音验证模式...");
                     await audioBtn.click({ force: true });
                     await page.waitForTimeout(2000); 
                 }
 
-                // 🌟 核心修复：精准定位 Buster 的按钮 ID
                 const busterBtn = challengeFrame.locator('#solver-button').first();
                 
-                if (await busterBtn.isVisible({ timeout: 5000 })) {
+                // 🌟 核心修复 2：增加等待时间，挂代理后扩展渲染可能会稍慢几秒
+                if (await busterBtn.isVisible({ timeout: 10000 })) {
                     console.log("🔄 发现 Buster 按钮，准备启动【真实物理点击】...");
                     
                     let solved = false;
                     for (let tryCount = 1; tryCount <= 3; tryCount++) {
                         console.log(`🖱️ 第 ${tryCount} 次尝试触发 Buster...`);
                         
-                        // 🌟 杀手锏：获取按钮在屏幕上的物理坐标，驱动虚拟鼠标真实点击
                         const box = await busterBtn.boundingBox();
                         if (box) {
                             await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
@@ -115,12 +109,12 @@ const extensionPath = path.resolve(__dirname, 'extensions/buster/unpacked');
                             console.log("✅ Buster 破解成功！");
                             break; 
                         } else {
-                            console.log(`⚠️ 第 ${tryCount} 次触发未能完成破解，可能是网络拦截，准备重试...`);
+                            console.log(`⚠️ 第 ${tryCount} 次触发未能完成破解，准备重试...`);
                         }
                     }
                     
                     if (!solved) {
-                        console.log("❌ Buster 破解彻底失败 (极大可能是当前 WARP IP 被 Google 拒绝下发音频)。");
+                        console.log("❌ Buster 破解彻底失败 (极大可能是当前节点 IP 仍被 Google 拒绝下发音频)。");
                     }
                 } else {
                     console.log("⚠️ 找不到 Buster 破解按钮，跳过破解...");
@@ -157,7 +151,7 @@ const extensionPath = path.resolve(__dirname, 'extensions/buster/unpacked');
             }
         } else {
             console.log("❌ 页面未出现可点击的 Renew 按钮 (因为前置验证码未通过)。");
-            await sendTG(`❌ 续期跳过：验证码未通过 (大概率因 IP 质量导致音频被拒)。`);
+            await sendTG(`❌ 续期跳过：验证码未通过。`);
         }
 
     } catch (error) {
