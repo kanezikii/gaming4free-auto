@@ -5,7 +5,7 @@ const path = require('path');
 // 💡 核心配置
 // ==========================================
 const RENEW_URL = 'https://game4free.net/woairenqi'; 
-const MC_USERNAME = 'renqi'; 
+const MC_USERNAME = 'renqi'; // 保持使用正确的标识符
 
 const TG_TOKEN = process.env.TG_TOKEN || '';
 const TG_CHAT = process.env.TG_CHAT_ID || ''; 
@@ -32,6 +32,7 @@ const extensionPath = path.resolve(__dirname, 'extensions/buster/unpacked');
     console.log(`👤 填入服务器名: ${MC_USERNAME}`);
 
     const browserContext = await chromium.launchPersistentContext('', {
+        channel: 'chrome', // 🌟 核心破局点 1：强制使用自带的完整版 Chrome，解决 MP3 解码问题！
         headless: false, 
         args: [
             `--disable-extensions-except=${extensionPath}`,
@@ -39,7 +40,8 @@ const extensionPath = path.resolve(__dirname, 'extensions/buster/unpacked');
             '--no-sandbox',
             '--disable-dev-shm-usage',
             '--use-fake-ui-for-media-stream',
-            '--use-fake-device-for-media-stream'
+            '--use-fake-device-for-media-stream',
+            '--autoplay-policy=no-user-gesture-required' // 🌟 核心破局点 2：允许音频自动播放
         ]
     });
 
@@ -66,22 +68,31 @@ const extensionPath = path.resolve(__dirname, 'extensions/buster/unpacked');
         } else {
             const challengeFrame = page.frameLocator('iframe[title*="recaptcha challenge"]');
             try {
+                // 🌟 防御性步骤：如果当前是图片九宫格，先强制点击耳机图标切换到语音模式
+                const audioBtn = challengeFrame.locator('#recaptcha-audio-button');
+                if (await audioBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+                    console.log("🎧 手动点击耳机图标，切换到语音验证模式...");
+                    await audioBtn.click({ force: true });
+                    await page.waitForTimeout(2000); 
+                }
+
+                // 定位 Buster 的小人按钮
                 const busterBtn = challengeFrame.locator('.help-button-holder').first();
                 
                 if (await busterBtn.isVisible({ timeout: 5000 })) {
-                    console.log("🔄 发现 Buster 按钮，准备启动防假死点击矩阵...");
+                    console.log("🔄 发现 Buster 按钮，启动智能点击矩阵...");
                     
                     let solved = false;
-                    // 🌟 核心修复 1：尝试最多 3 次点击 Buster，解决加载不同步导致的点击失效
+                    // 循环最多尝试 3 次，防止插件反应慢导致的漏点
                     for (let tryCount = 1; tryCount <= 3; tryCount++) {
-                        console.log(`🖱️ 第 ${tryCount} 次尝试点击 Buster...`);
+                        console.log(`🖱️ 第 ${tryCount} 次尝试触发 Buster...`);
                         
-                        // 强制悬停并等待 800ms，确保内部事件监听器已加载完成
                         await busterBtn.hover();
-                        await page.waitForTimeout(800); 
-                        await busterBtn.click({ force: true });
+                        await page.waitForTimeout(500); 
+                        // 模拟人类点击，带少许延迟
+                        await busterBtn.click({ force: true, delay: 100 });
                         
-                        console.log(`⏳ 等待识别结果 (最多 15 秒)...`);
+                        console.log(`⏳ 等待识别结果 (最多轮询 15 秒)...`);
                         for (let wait = 0; wait < 15; wait++) {
                             await page.waitForTimeout(1000); 
                             let check = await anchor.getAttribute('aria-checked').catch(() => 'false');
@@ -93,14 +104,14 @@ const extensionPath = path.resolve(__dirname, 'extensions/buster/unpacked');
                         
                         if (solved) {
                             console.log("✅ Buster 破解成功！");
-                            break; // 成功则跳出重试循环
+                            break; 
                         } else {
-                            console.log(`⚠️ 第 ${tryCount} 次点击未成功破解，准备重试...`);
+                            console.log(`⚠️ 第 ${tryCount} 次触发未能完成破解，准备重试...`);
                         }
                     }
                     
                     if (!solved) {
-                        console.log("❌ Buster 破解彻底失败 (可能因 WARP IP 质量差被 Google 拒绝下发音频)。");
+                        console.log("❌ Buster 破解彻底失败 (可能是 Google 判定环境风险，拒绝下发音频)。");
                     }
                 } else {
                     console.log("⚠️ 找不到 Buster 破解按钮，跳过破解...");
@@ -116,10 +127,8 @@ const extensionPath = path.resolve(__dirname, 'extensions/buster/unpacked');
         await page.screenshot({ path: path.join(__dirname, `screenshots/1_filled.png`) });
 
         console.log("🚀 准备提交续期请求...");
-        // 🌟 核心修复 2：防止因未破解导致按钮叫做 "Complete Verification" 而引发 30s 崩溃
         const renewBtn = page.locator('button:has-text("Renew")').first();
         
-        // 软等待 5 秒，如果不存在直接走 else 分支，绝不死等
         if (await renewBtn.isVisible({ timeout: 5000 }).catch(()=>false)) {
             if (await renewBtn.isEnabled()) {
                 await renewBtn.click();
