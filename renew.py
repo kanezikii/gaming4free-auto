@@ -22,12 +22,13 @@ def send_tg(msg):
             pass
 
 print(f"\n===== 🚀 开始执行极速续期 (WARP + Python 终极版) =====")
-# 🌟 核心修改：使用 WARP 默认的 SOCKS5 代理端口
-proxy_str = "socks5://127.0.0.1:40000"
 
-with SB(uc=True, proxy=proxy_str, headless=False) as sb:
+# 🌟 修复：删除了 proxy_str 变量定义
+
+# 🌟 修复：去掉了 proxy 参数，直接走全局网络
+with SB(uc=True, headless=False) as sb:
     try:
-        print("🌐 正在通过 WARP 代理访问目标...")
+        print("🌐 正在通过全局 WARP 访问目标...")
         sb.open(TARGET_URL)
         sb.sleep(2)
 
