@@ -13,14 +13,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # =========================
-      # 🟡 1️⃣ 启动 WARP 动态 IP 代理
+     # =========================
+      # 🟡 1️⃣ 启动 WARP 全局动态 IP
       # =========================
       - name: Setup WARP
         uses: fscarmen/warp-on-actions@v1.3
         with:
           stack: dual
-          mode: client # 默认开启 socks5://127.0.0.1:40000
+          # 🌟 修复：删除了 mode: client，直接使用默认的全局接管模式
 
       - name: Install system deps
         run: |
@@ -47,9 +47,9 @@ jobs:
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
         run: |
           mkdir -p screenshots
-          # 验证 WARP 是否生效
-          echo "🌍 当前出口 IP:"
-          curl -s -x socks5://127.0.0.1:40000 https://api.ipify.org
+          # 🌟 修复：去掉 -x socks5 参数，直接测全局 IP
+          echo "🌍 当前全局出口 IP (应为 Cloudflare WARP IP):"
+          curl -s https://api.ipify.org
           echo ""
           xvfb-run -a python renew.py
           
