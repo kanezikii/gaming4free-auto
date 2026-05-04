@@ -31,16 +31,22 @@ const extensionPath = path.resolve(__dirname, 'extensions/buster/unpacked');
     console.log(`🎯 目标 URL: ${RENEW_URL}`);
     console.log(`👤 填入服务器名: ${MC_USERNAME}`);
 
-    // 🌟 回归初心：去除 channel: 'chrome'，使用你 yml 中默认安装的 Chromium，最稳定。
+    // 🌟 回归初心
     const browserContext = await chromium.launchPersistentContext('', {
+        channel: 'chrome', 
         headless: false, 
+        // 🌟 核心破局点：让 Chrome 强制走 Xray 的本地代理端口
+        proxy: {
+            server: 'socks5://127.0.0.1:10808'
+        },
         args: [
             `--disable-extensions-except=${extensionPath}`,
             `--load-extension=${extensionPath}`,
             '--no-sandbox',
             '--disable-dev-shm-usage',
             '--use-fake-ui-for-media-stream',
-            '--use-fake-device-for-media-stream'
+            '--use-fake-device-for-media-stream',
+            '--autoplay-policy=no-user-gesture-required'
         ]
     });
 
