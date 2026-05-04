@@ -1,4 +1,4 @@
-name: gaming4free renew (WARP)
+name: gaming4free renew (Xray)
 
 on:
   workflow_dispatch:
@@ -11,30 +11,44 @@ jobs:
     timeout-minutes: 15
 
     steps:
-      # =========================
-      # 🟡 0️⃣ 拉取当前仓库代码
-      # =========================
       - uses: actions/checkout@v4
 
-      # =========================
-      # 🟡 1️⃣ Node环境
-      # =========================
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
       # =========================
-      # 🟡 2️⃣ WARP (解决 IP 限制)
+      # 🟡 1️⃣ 下载并运行 Xray 专属代理 (替代 WARP)
       # =========================
-      - name: 创建WARP网络
-        uses: fscarmen/warp-on-actions@v1.3
-        with:
-          stack: dual
-          mode: client
+      - name: Setup Xray Proxy
+        env:
+          XRAY_CONFIG: ${{ secrets.XRAY_CONFIG }}
+        run: |
+          mkdir -p xray-core
+          cd xray-core
+          # 下载官方 Xray
+          wget -qO xray.zip https://github.com/XTLS/Xray-core/releases/download/v1.8.9/Xray-linux-64.zip
+          unzip -q xray.zip
+          chmod +x xray
+          
+          # 将你的 JSON 写入配置文件
+          echo "$XRAY_CONFIG" > config.json
+          
+          # 后台静默运行 Xray
+          nohup ./xray -c config.json > xray.log 2>&1 &
+          
+          # 等待 3 秒让 Xray 连上节点
+          sleep 3
+          
+          echo "🌍 本机直连 IP:"
+          curl -s https://api.ipify.org
+          echo -e "\n\n🚀 Xray 代理后 IP (确认是否变为了你的节点IP):"
+          curl -s -x socks5://127.0.0.1:10808 https://api.ipify.org
+          echo ""
 
       # =========================
-      # 🟡 3️⃣ 系统依赖（音频/虚拟屏幕）
+      # 🟡 2️⃣ 系统依赖（音频）
       # =========================
       - name: Install deps
         run: |
@@ -43,39 +57,34 @@ jobs:
             pulseaudio alsa-utils ffmpeg
 
           pulseaudio --start --exit-idle-time=-1 || true
-
           pactl load-module module-null-sink sink_name=virtual_speaker || true
           pactl set-default-sink virtual_speaker || true
-
           pactl load-module module-virtual-source source_name=virtual_mic || true
           pactl set-default-source virtual_mic || true
 
       # =========================
-      # 🟡 4️⃣ 安装 Playwright
+      # 🟡 3️⃣ 安装 Playwright
       # =========================
       - name: Install playwright
         run: |
-          # 如果你的仓库里已经有 package.json，这里直接 npm install 也可以
           npm init -y
           npm install playwright
           npx playwright install chromium
 
       # =========================
-      # 🟡 5️⃣ 下载并解压 Buster 插件
+      # 🟡 4️⃣ 下载 Buster
       # =========================
       - name: Download and Unzip Buster
         run: |
           mkdir -p extensions/buster
-          wget -O extensions/buster/buster.zip \
+          wget -qO extensions/buster/buster.zip \
             https://github.com/dessant/buster/releases/download/v3.1.0/buster_captcha_solver_for_humans-3.1.0-chrome.zip
           
           mkdir -p extensions/buster/unpacked
-          7z x -y extensions/buster/buster.zip -oextensions/buster/unpacked
-
-          echo "📦 Buster 解压完成"
+          7z x -y extensions/buster/buster.zip -oextensions/buster/unpacked > /dev/null
 
       # =========================
-      # 🟡 6️⃣ 运行核心续期脚本
+      # 🟡 5️⃣ 运行脚本
       # =========================
       - name: Run script
         env:
@@ -87,7 +96,7 @@ jobs:
           xvfb-run -a node renew.js
 
       # =========================
-      # 🟡 7️⃣ 上传运行截图
+      # 🟡 6️⃣ 上传截图
       # =========================
       - name: Upload screenshots
         uses: actions/upload-artifact@v4
