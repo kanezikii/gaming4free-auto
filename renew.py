@@ -90,7 +90,7 @@ with SB(uc=True, proxy=proxy_str, headless=False) as sb:
             else:
                 print("❌ 当前 IP 无法加载音频，可能被 Google 临时屏蔽。")
         
-        # 验证结束，彻底切回最外层，准备填表单
+       # 验证结束，彻底切回最外层，准备填表单
         sb.switch_to_default_content()
         print(f"✍️ 填入服务器名: {MC_USERNAME}")
         # 定位唯一的文本输入框
@@ -101,8 +101,9 @@ with SB(uc=True, proxy=proxy_str, headless=False) as sb:
 
         print("🚀 提交续期请求...")
         try:
-            # 🌟 核心修复：直接使用带有智能等待机制的 click，最长等 10 秒！
-            sb.click('button:contains("Renew")', timeout=10)
+            # 🌟 核心杀手锏：使用无视标签的“地毯式” XPath 搜索！
+            # 无论是 <button>, <input>, 还是 <a>, 只要它写着 Renew 或者 value 是 Renew，统统按下！
+            sb.click('xpath=//*[contains(text(), "Renew") or @value="Renew"]', timeout=10)
             print("🖱️ 成功点击 Renew 按钮！")
             
             print("⏳ 等待服务器响应...")
@@ -114,11 +115,11 @@ with SB(uc=True, proxy=proxy_str, headless=False) as sb:
                 print("✅ 续期大成功！")
                 send_tg(f"✅ 服务器 [{MC_USERNAME}] 续期成功！(WARP IP)")
             else:
-                print("⚠️ 未读取到成功横幅，请查阅截图确认。")
+                print("⚠️ 按钮已点，但未读取到成功横幅，请查阅截图确认。")
                 send_tg(f"⚠️ 续期已执行，请查阅截图确认状态。")
         except Exception as e:
             print(f"❌ 页面未出现可点击的 Renew 按钮或点击超时: {e}")
-            send_tg(f"❌ 续期跳过：无法点击 Renew，验证码可能未通过。")
+            send_tg(f"❌ 续期跳过：无法点击 Renew。")
 
     except Exception as e:
         print(f"❌ 发生致命错误: {e}")
