@@ -66,24 +66,28 @@ with SB(uc=True, proxy=proxy_str, headless=False) as sb:
             print("⚠️ JS 未能点击，尝试备用 XPath 方案...")
             sb.click('xpath=//*[contains(translate(., "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz"), "add 90")]')
 
-        # 🌟 核心杀手锏：切断通信的“盲等静默”，规避 CF 的反机器人监测！
-        print("⏳ 盲等 6 秒钟，让 CF 盾在静默中安静加载 (严禁探测以防被强制掐断)...")
-        time.sleep(6) # 使用底层 time.sleep，浏览器在这 6 秒内毫无被探测的压力
+        # 🌟 核心杀手锏：加长盲等时间，并删除愚蠢的 is_element_visible 判断
+        print("⏳ 盲等 8 秒钟，让 CF 盾在静默中完全加载...")
+        time.sleep(8) 
         
         try:
-            cf_iframe = 'iframe[src*="cloudflare"], iframe[src*="turnstile"]'
-            if sb.is_element_visible(cf_iframe):
-                print("🛡️ 雷达恢复！发现 Cloudflare 验证弹窗，准备实施物理点击...")
-                sb.switch_to_frame(cf_iframe)
-                sb.sleep(1)
-                sb.click('body') # 盲点中心
-                print("🖱️ 已按下 CF 验证框！等待转圈通过...")
-                time.sleep(6)
+            print("🛡️ 放弃视觉检查，直接尝试强行切入 CF 盾底层框架...")
+            cf_iframe = 'iframe[src*="cloudflare"], iframe[src*="turnstile"], iframe[title*="Cloudflare"]'
+            
+            # 🌟 直接切入！哪怕 Selenium 觉得它“不可见”，只要网页源码里有，就硬切进去！
+            sb.switch_to_frame(cf_iframe, timeout=3)
+            sb.sleep(1)
+            
+            # 使用双重保险点击：JS 底层触发 + 物理模拟点击
+            sb.execute_script("document.body.click();")
+            sb.click('body') 
+            
+            print("🖱️ 已对 CF 验证框执行物理级盲击！等待转圈通过...")
+            time.sleep(6)
         except Exception as e:
-            print(f"⏩ CF 盾处理遇到小阻碍或已自动放行: {e}")
+            print(f"⏩ 盲击结束 (未找到盾或由于网络波动跳过): {e}")
         finally:
             try:
-                # 极其温柔地退回主框架
                 sb.switch_to_default_content()
             except:
                 pass
