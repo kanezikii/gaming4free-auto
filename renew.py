@@ -67,27 +67,28 @@ with SB(uc=True, proxy=proxy_str, headless=False) as sb:
             sb.click('xpath=//*[contains(translate(., "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz"), "add 90")]')
 
         print("⏳ 检查是否有 Cloudflare 盾弹窗...")
+        # 等待4秒，让 CF 盾有足够的时间弹出来
         sb.sleep(4)
         
-        # 🌟 核心新增：自动处理 Cloudflare Turnstile 弹窗！
+        # 🌟 核心修复：移除了 is_element_visible 的 timeout 参数
         cf_iframe = 'iframe[src*="cloudflare"], iframe[title*="Cloudflare"]'
-        if sb.is_element_visible(cf_iframe, timeout=3):
+        if sb.is_element_visible(cf_iframe):
             print("🛡️ 遭遇 Cloudflare Turnstile 验证弹窗，准备破盾...")
             try:
-                # 切入 Cloudflare 的内置安全框架
+                # 切入 CF 的框架
                 sb.switch_to_frame(cf_iframe)
-                # 物理模拟点击整个验证框的躯体
-                sb.click('body', timeout=3)
+                sb.sleep(1)
+                # 点击整个躯干区域，触发人机验证
+                sb.click('body')
                 print("🖱️ 已按下 CF 验证框！等待转圈验证通过...")
-                sb.sleep(5)
+                sb.sleep(6)
             except Exception as e:
                 print(f"⚠️ CF 破盾发生小异常: {e}")
             finally:
-                # 无论结果如何，安全撤回到主页面
                 sb.switch_to_default_content()
 
         print("⏳ 等待最终续期结果加载...")
-        # 等待服务器刷新时间
+        # 等待服务器刷新时间和页面
         sb.sleep(6)
         sb.save_screenshot("screenshots/2_result.png")
 
