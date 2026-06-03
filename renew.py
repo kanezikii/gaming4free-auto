@@ -36,7 +36,7 @@ with SB(uc=True, proxy=proxy_str, headless=False) as sb:
 
         print("✍️ 尝试填入游戏ID (OPTIONAL)...")
         try:
-            sb.type('input[placeholder*="Steve"], input[placeholder*="Player"]', MC_USERNAME, timeout=5)
+            sb.type('input[placeholder*="Steve"], input[placeholder*="Player"]', MC_USERNAME, timeout=4)
             print("✅ ID 填入成功！")
         except:
             print("ℹ️ 未找到输入框或无需填入，继续下一步。")
@@ -66,42 +66,44 @@ with SB(uc=True, proxy=proxy_str, headless=False) as sb:
             print("⚠️ JS 未能点击，尝试备用 XPath 方案...")
             sb.click('xpath=//*[contains(translate(., "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz"), "add 90")]')
 
-        # 🌟 核心杀手锏：全天候雷达监控 CF 弹窗！
-        print("⏳ 开启全天候雷达，检测是否有 Cloudflare 盾弹窗 (最高守候 12 秒)...")
-        # 扩大匹配范围，抓取一切疑似的验证框
-        cf_iframe = 'iframe[src*="cloudflare"], iframe[src*="turnstile"], iframe[title*="Cloudflare"], iframe[title*="challenge"]'
+        # 🌟 核心杀手锏：切断通信的“盲等静默”，规避 CF 的反机器人监测！
+        print("⏳ 盲等 6 秒钟，让 CF 盾在静默中安静加载 (严禁探测以防被强制掐断)...")
+        time.sleep(6) # 使用底层 time.sleep，浏览器在这 6 秒内毫无被探测的压力
         
         try:
-            # 死死盯住屏幕 12 秒，一旦弹窗露头立马捕获！
-            sb.wait_for_element(cf_iframe, timeout=12)
-            print("🛡️ 成功捕获 Cloudflare Turnstile 验证弹窗！准备破盾...")
-            
-            # 切入 CF 的内置框架
-            sb.switch_to_frame(cf_iframe)
-            sb.sleep(1.5) # 给盾里的动画一点时间
-            
-            # 物理模拟点击整个验证框的躯体
-            sb.click('body')
-            print("🖱️ 已狠狠按下 CF 验证框！等待转圈验证通过...")
-            sb.sleep(7)
-            
+            cf_iframe = 'iframe[src*="cloudflare"], iframe[src*="turnstile"]'
+            if sb.is_element_visible(cf_iframe):
+                print("🛡️ 雷达恢复！发现 Cloudflare 验证弹窗，准备实施物理点击...")
+                sb.switch_to_frame(cf_iframe)
+                sb.sleep(1)
+                sb.click('body') # 盲点中心
+                print("🖱️ 已按下 CF 验证框！等待转圈通过...")
+                time.sleep(6)
         except Exception as e:
-            # 如果 12 秒后都没弹窗，说明直接免验证通过了
-            print("⏩ 12秒内未检测到 CF 弹窗，或盾已自动消失，继续下一步...")
-            
+            print(f"⏩ CF 盾处理遇到小阻碍或已自动放行: {e}")
         finally:
-            # 无论破盾成功与否，安全撤回到主页面
-            sb.switch_to_default_content()
+            try:
+                # 极其温柔地退回主框架
+                sb.switch_to_default_content()
+            except:
+                pass
 
-        print("⏳ 等待最终续期结果加载 (等待 6 秒)...")
-        sb.sleep(6)
-        sb.save_screenshot("screenshots/2_result.png")
+        print("⏳ 等待最终续期结果加载 (等待 5 秒)...")
+        time.sleep(5)
+        
+        try:
+            sb.save_screenshot("screenshots/2_result.png")
+        except:
+            print("⚠️ 截图保存失败，浏览器内核可能在跳转中。")
 
         print("✅ 流程执行完毕！")
         send_tg(f"✅ 服务器 [{MC_USERNAME}] 续期脚本运行完毕！\n官方界面已重构，请查阅 GitHub 最新截图确认 CF 盾是否通过以及时间是否增加。")
 
     except Exception as e:
         print(f"❌ 发生致命错误: {e}")
-        os.makedirs("screenshots", exist_ok=True)
-        sb.save_screenshot("screenshots/error.png")
+        try:
+            os.makedirs("screenshots", exist_ok=True)
+            sb.save_screenshot("screenshots/error.png")
+        except:
+            pass
         send_tg(f"❌ 自动续期崩溃: {e}")
