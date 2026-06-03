@@ -63,37 +63,42 @@ with SB(uc=True, proxy=proxy_str, headless=False) as sb:
         if is_clicked:
             print("🖱️ JavaScript 强制穿透点击成功！")
         else:
-            print("⚠️ JS 未能点击，尝试备用纯正 XPath 方案...")
+            print("⚠️ JS 未能点击，尝试备用 XPath 方案...")
             sb.click('xpath=//*[contains(translate(., "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz"), "add 90")]')
 
-        print("⏳ 检查是否有 Cloudflare 盾弹窗...")
-        # 等待4秒，让 CF 盾有足够的时间弹出来
-        sb.sleep(4)
+        # 🌟 核心杀手锏：全天候雷达监控 CF 弹窗！
+        print("⏳ 开启全天候雷达，检测是否有 Cloudflare 盾弹窗 (最高守候 12 秒)...")
+        # 扩大匹配范围，抓取一切疑似的验证框
+        cf_iframe = 'iframe[src*="cloudflare"], iframe[src*="turnstile"], iframe[title*="Cloudflare"], iframe[title*="challenge"]'
         
-        # 🌟 核心修复：移除了 is_element_visible 的 timeout 参数
-        cf_iframe = 'iframe[src*="cloudflare"], iframe[title*="Cloudflare"]'
-        if sb.is_element_visible(cf_iframe):
-            print("🛡️ 遭遇 Cloudflare Turnstile 验证弹窗，准备破盾...")
-            try:
-                # 切入 CF 的框架
-                sb.switch_to_frame(cf_iframe)
-                sb.sleep(1)
-                # 点击整个躯干区域，触发人机验证
-                sb.click('body')
-                print("🖱️ 已按下 CF 验证框！等待转圈验证通过...")
-                sb.sleep(6)
-            except Exception as e:
-                print(f"⚠️ CF 破盾发生小异常: {e}")
-            finally:
-                sb.switch_to_default_content()
+        try:
+            # 死死盯住屏幕 12 秒，一旦弹窗露头立马捕获！
+            sb.wait_for_element(cf_iframe, timeout=12)
+            print("🛡️ 成功捕获 Cloudflare Turnstile 验证弹窗！准备破盾...")
+            
+            # 切入 CF 的内置框架
+            sb.switch_to_frame(cf_iframe)
+            sb.sleep(1.5) # 给盾里的动画一点时间
+            
+            # 物理模拟点击整个验证框的躯体
+            sb.click('body')
+            print("🖱️ 已狠狠按下 CF 验证框！等待转圈验证通过...")
+            sb.sleep(7)
+            
+        except Exception as e:
+            # 如果 12 秒后都没弹窗，说明直接免验证通过了
+            print("⏩ 12秒内未检测到 CF 弹窗，或盾已自动消失，继续下一步...")
+            
+        finally:
+            # 无论破盾成功与否，安全撤回到主页面
+            sb.switch_to_default_content()
 
-        print("⏳ 等待最终续期结果加载...")
-        # 等待服务器刷新时间和页面
+        print("⏳ 等待最终续期结果加载 (等待 6 秒)...")
         sb.sleep(6)
         sb.save_screenshot("screenshots/2_result.png")
 
         print("✅ 流程执行完毕！")
-        send_tg(f"✅ 服务器 [{MC_USERNAME}] 续期脚本运行完毕！\n请查阅 GitHub 最新截图确认 CF 盾是否通过，以及时间是否增加。")
+        send_tg(f"✅ 服务器 [{MC_USERNAME}] 续期脚本运行完毕！\n官方界面已重构，请查阅 GitHub 最新截图确认 CF 盾是否通过以及时间是否增加。")
 
     except Exception as e:
         print(f"❌ 发生致命错误: {e}")
