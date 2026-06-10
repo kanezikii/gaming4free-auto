@@ -2,8 +2,6 @@ import os, sys, time, urllib.request, json
 from seleniumbase import SB
 
 # ==========================================
-# 💡 G4F.GG 自动续期脚本 (生产环境精简版)
-# ==========================================
 TARGET_URL = "https://g4f.gg/renqi" 
 MC_USERNAME = "renqi"
 
@@ -13,7 +11,6 @@ TG_CHAT = os.getenv("TG_CHAT_ID", "")
 def send_tg(status, time_str):
     if TG_TOKEN and TG_CHAT:
         try:
-            # 极简通知格式：只保留节点、状态和剩余时间
             msg = f"🤖 节点 [{MC_USERNAME}]\n状态: {status}\n剩余时间: {time_str}"
             url = f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage"
             data = json.dumps({"chat_id": TG_CHAT, "text": msg}).encode('utf-8')
