@@ -2,7 +2,7 @@ import os, sys, time, urllib.request, json, re
 from seleniumbase import SB
 
 # ==========================================
-# 💡 G4F.GG 续期
+# 💡 G4F.GG 自动续期
 # ==========================================
 TARGETS = [
     {"name": "renqi", "url": "https://g4f.gg/renqi"},
@@ -47,8 +47,7 @@ for target in TARGETS:
     print(f"\n开始处理节点: [{name}]")
     
     try:
-        # 🌟 核心改动：将浏览器的启动放在循环内部。
-        # 确保每次循环都开启一个全新的、未被 Cloudflare 标记的纯净浏览器进程！
+        # 确保每次循环都开启一个全新的、未被拦截的纯净浏览器进程
         with SB(uc=True, proxy=proxy_str, headless=False, window_size="1920,1080") as sb:
             print(f"正在访问目标网址: {url}")
             sb.driver.set_window_position(0, 0)
@@ -92,6 +91,9 @@ for target in TARGETS:
             print("点击完成，等待验证结果...")
             time.sleep(8)
             
+            print("等待 16 秒广告时间，确保最终页面完全加载...")
+            time.sleep(16)
+            
             print("获取页面剩余时间...")
             page_text = sb.get_text("body")
             time_match = re.search(r'\d{2}:\d{2}:\d{2}', page_text)
@@ -114,7 +116,6 @@ for target in TARGETS:
 
     except Exception as e:
         print(f"节点 [{name}] 执行过程中发生异常: {e}")
-        # 如果因为崩溃等原因跳出，不影响后续节点的执行，直接记录失败并继续
         task_results.append({"name": name, "status": "❌ 执行失败", "time": "未知"})
 
 print("\n所有节点处理完毕，正在统一发送综合汇报...")
