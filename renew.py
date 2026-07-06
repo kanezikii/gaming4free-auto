@@ -2,7 +2,7 @@ import os, sys, time, urllib.request, json, re
 from seleniumbase import SB
 
 # ==========================================
-# 💡 G4F.GG 续期脚本
+# 💡 G4F.GG 自动续期
 # ==========================================
 TARGETS = [
     {"name": "renqi", "url": "https://g4f.gg/renqi"},
@@ -31,7 +31,7 @@ def send_unified_tg(results):
         except Exception as e:
             print(f"发送通知失败: {e}")
 
-print("\n===== 开始执行 G4F 自动续期 =====")
+print("\n===== 开始执行 =====")
 
 proxy_str = "socks5://127.0.0.1:40000"
 task_results = []
@@ -56,10 +56,11 @@ for target in TARGETS:
             sb.save_screenshot(f"screenshots/{name}_1_page_loaded.png")
 
             print("尝试点击初始续期按钮...")
+   
             js_click_code = """
-            let els = document.querySelectorAll('button, a, input, div, span');
-            for (let i = els.length - 1; i >= 0; i--) {
-                let el = els[i];
+            let step1_els = document.querySelectorAll('button, a, input, div, span');
+            for (let i = step1_els.length - 1; i >= 0; i--) {
+                let el = step1_els[i];
                 let text = (el.innerText || el.value || '').toUpperCase();
                 if (text.includes('ADD 90')) {
                     el.click();
@@ -86,14 +87,14 @@ for target in TARGETS:
                     os.system(f"xdotool mousemove {x} {y} click 1")
                     time.sleep(0.1)
             
-            print("点击完成，等待验证盾亮起绿勾...")
+            print("点击完成")
             time.sleep(8)
             
             print("尝试点击最后的 [VOTE - ADDS 90 MINUTES] 确认按钮...")
             js_vote_click = """
-            let els = document.querySelectorAll('button, a, input, div, span');
-            for (let i = els.length - 1; i >= 0; i--) {
-                let el = els[i];
+            let step2_els = document.querySelectorAll('button, a, input, div, span');
+            for (let i = step2_els.length - 1; i >= 0; i--) {
+                let el = step2_els[i];
                 let text = (el.innerText || '').toUpperCase();
                 if (text.includes('VOTE') || text.includes('SUCCESS')) {
                     el.click();
@@ -103,7 +104,6 @@ for target in TARGETS:
             """
             sb.execute_script(js_vote_click)
             
-            #  XPath 强点
             try:
                 sb.click('xpath=//*[contains(translate(., "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz"), "vote")]', timeout=2)
             except:
@@ -119,7 +119,6 @@ for target in TARGETS:
             print(f"提取到时间: {remaining_time}")
                 
             page_text_lower = page_text.lower()
-            # 兼容多种成功提示词
             if "90 minutes added" in page_text_lower or "extended this server recently" in page_text_lower or "success" in page_text_lower:
                 status = "✅ 续期成功"
             else:
