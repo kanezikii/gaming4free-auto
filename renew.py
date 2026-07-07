@@ -110,7 +110,7 @@ for target in TARGETS:
                 pass
             
             print("等待 25 秒广告或最终加载时间...")
-            time.sleep(25)
+            time.sleep(30)
             
             print("获取页面剩余时间...")
             page_text = sb.get_text("body")
