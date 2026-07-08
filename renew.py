@@ -2,7 +2,7 @@ import os, sys, time, urllib.request, json, re
 from seleniumbase import SB
 
 # ==========================================
-# 💡 G4F.GG 自动续期
+# 💡 G4F.GG 自动续期 
 # ==========================================
 TARGETS = [
     {"name": "renqi", "url": "https://g4f.gg/renqi"},
@@ -33,7 +33,7 @@ def send_unified_tg(results):
 
 print("\n===== 开始执行 =====")
 
-proxy_str = "socks5://127.0.0.1:40000"
+proxy_str = "socks5://127.0.0.1:10808"
 task_results = []
 
 print("初始化物理鼠标依赖...")
@@ -55,7 +55,7 @@ for target in TARGETS:
             os.makedirs("screenshots", exist_ok=True)
             sb.save_screenshot(f"screenshots/{name}_1_page_loaded.png")
 
-            print("点击初始续期按钮...")
+            print("尝试点击初始续期按钮...")
             js_click_code = """
             let step1_els = document.querySelectorAll('button, a, input, div, span');
             for (let i = step1_els.length - 1; i >= 0; i--) {
@@ -89,17 +89,30 @@ for target in TARGETS:
             print("点击完成，等待验证盾亮起绿勾 (10秒)...")
             time.sleep(10)
             
-            print("执行中心垂直扫射，确保物理击中 [VOTE] 按钮...")
             for sweep_y in range(600, 780, 30):
                 os.system(f"xdotool mousemove 960 {sweep_y} click 1")
                 time.sleep(0.2)
+                
+            print("尝试点击最新的 [✓ VOTED — +90m] 确认按钮...")
+            js_vote_click = """
+            let step2_els = document.querySelectorAll('button, a, input, div, span');
+            for (let i = step2_els.length - 1; i >= 0; i--) {
+                let el = step2_els[i];
+                let text = (el.innerText || '').toUpperCase();
+                if (text.includes('VOTED') || text.includes('VOTE') || text.includes('+90M')) {
+                    el.click();
+                    break;
+                }
+            }
+            """
+            sb.execute_script(js_vote_click)
             
-            print("等待 45 秒")
+            print("等待 45 秒让视频广告完整播放并发放奖励...")
             time.sleep(45)
             
-            print("奖励已发放，强制刷新页面")
+            print("奖励已发放，强制刷新页面以清理所有广告遮挡...")
             sb.refresh_page()
-            time.sleep(8) # 等待新页面加载完毕
+            time.sleep(8)
             
             print("获取页面最新剩余时间...")
             page_text = sb.get_text("body")
