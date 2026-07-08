@@ -1,78 +1,66 @@
-name: gaming4free renew (WARP + Python)
+name: Gaming4Free Auto Renew (Ultimate)
 
 on:
   workflow_dispatch:
   schedule:
     - cron: "40 * * * *"   # 每小时抽卡一次
 
+permissions:
+  contents: write
+
 jobs:
-  run:
+  run_renewal:
     runs-on: ubuntu-22.04
     timeout-minutes: 15
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
       - name: Install dependencies
-        run: pip install seleniumbase
+        run: |
+          python -m pip install --upgrade pip
+          pip install seleniumbase requests
+          seleniumbase install chromedriver
 
-      - name: Start Sing-box Proxy Node
+      - name: Setup Proxy Tunnel (Sing-box)
         env:
           PROXY_JSON: ${{ secrets.PROXY_JSON }}
         run: |
-          # 1. 下载 sing-box 内核
           wget https://github.com/SagerNet/sing-box/releases/download/v1.9.0/sing-box-1.9.0-linux-amd64.tar.gz
           tar -xvf sing-box-1.9.0-linux-amd64.tar.gz
           sudo cp sing-box-1.9.0-linux-amd64/sing-box /usr/local/bin/
           
-          # 2. 将 Secret 写入 config.json
           echo "$PROXY_JSON" > config.json
-
-          # 3. 🌟 终极 JSON 切除手术：暴力抹除所有不兼容的 GUI 配置，只留纯净代理核心！
+          
           python -c "
           import json
           try:
               with open('config.json', 'r', encoding='utf-8') as f: data = json.load(f)
-              
-              # 暴力切除：实验性功能 (包含 D 盘缓存路径)
               if 'experimental' in data: del data['experimental']
-              
-              # 暴力切除：桌面端专属 DNS 配置 (包含导致闪退的 predefined 字段)
               if 'dns' in data: del data['dns']
-              
-              # 暴力切除：桌面端路由规则 (包含 D 盘 srs 规则路径)
-              # 删掉后，sing-box 默认会将所有流量强制走第一个 outbound (即你的 vmess 代理)，完美符合需求！
               if 'route' in data: del data['route']
-                      
               with open('config.json', 'w', encoding='utf-8') as f: json.dump(data, f)
-              print('JSON 终极截肢手术完成！当前为纯净隧道模式。')
           except Exception as e:
               print('JSON 修复失败:', e)
           "
           
-          # 4. 后台启动代理客户端
           nohup sing-box run -c config.json > proxy.log 2>&1 &
-          
-          # 5. 等待代理启动并验证
           sleep 5
-          cat proxy.log # 打印后台日志
-          
-          # 测试隧道是否连通，如果连通会打印出你代理节点的 IP
-          curl -x socks5h://127.0.0.1:10808 https://ifconfig.me || echo "代理连接测试失败"
+          curl -x socks5h://127.0.0.1:10808 https://ifconfig.me || echo "代理连接测试失败，但继续运行"
 
-      - name: Run script
+      - name: Run Script
         env:
           TG_TOKEN: ${{ secrets.TG_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
         run: |
-          # 虚拟桌面运行 Python
-          xvfb-run python renew.py
+          # 🌟 使用 -a 参数自动分配最佳的虚拟显示器编号，完美触发 SeleniumBase 的破盾模块
+          xvfb-run -a python renew.py
           
       - name: Upload screenshots
         uses: actions/upload-artifact@v4
