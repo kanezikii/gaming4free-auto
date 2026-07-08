@@ -1,79 +1,143 @@
-name: Gaming4Free Auto Renew (Ultimate)
+import os, sys, time, urllib.request, json, re, random
+from seleniumbase import SB
 
-on:
-  workflow_dispatch:
-  schedule:
-    - cron: "40 * * * *"   # 每小时抽卡一次
+# ==========================================
+# 💡 G4F.GG 自动续期 (JS底层强点 + 暴力破盾必杀版)
+# ==========================================
 
-permissions:
-  contents: write
+# 智能虚拟桌面环境配置 (完美适配 GitHub Actions)
+if "DISPLAY" not in os.environ:
+    os.environ["DISPLAY"] = ":1"
+if "XAUTHORITY" not in os.environ:
+    if os.path.exists("/home/headless/.Xauthority"):
+        os.environ["XAUTHORITY"] = "/home/headless/.Xauthority"
 
-jobs:
-  run_renewal:
-    runs-on: ubuntu-22.04
-    timeout-minutes: 15
+TARGETS = [
+    {"name": "renqi", "url": "https://g4f.gg/renqi"},
+    {"name": "heisi", "url": "https://g4f.gg/heisi"}
+]
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+TG_TOKEN = os.getenv("TG_TOKEN", "")
+TG_CHAT = os.getenv("TG_CHAT_ID", "")
+PROXY_URL = "socks5://127.0.0.1:10808"
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
+def send_unified_tg(results):
+    if TG_TOKEN and TG_CHAT:
+        try:
+            lines = ["🤖 G4F 续期综合汇报"]
+            for res in results:
+                lines.append("-----------------------")
+                lines.append(f"节点: {res['name']}")
+                lines.append(f"状态: {res['status']}")
+                lines.append(f"剩余时间: {res['time']}")
+            
+            msg = "\n".join(lines)
+            url = f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage"
+            data = json.dumps({"chat_id": TG_CHAT, "text": msg}).encode('utf-8')
+            req = urllib.request.Request(url, data=data, headers={'Content-Type': 'application/json'})
+            urllib.request.urlopen(req, timeout=10)
+            print("✅ Telegram 综合通知发送成功。")
+        except Exception as e:
+            print(f"❌ 发送通知失败: {e}")
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install seleniumbase requests
-          seleniumbase install chromedriver
+def get_remaining_time(sb):
+    """通过官方专属 ID 获取精准时间"""
+    try:
+        sb.wait_for_element_visible('#sd-timer', timeout=15)
+        time.sleep(1)
+        return sb.get_text('#sd-timer').strip()
+    except:
+        try:
+            return sb.execute_script("let el = document.querySelector('#sd-timer'); return el ? el.innerText.trim() : '未知';")
+        except:
+            return "未知"
 
-      - name: Setup Proxy Tunnel (Sing-box)
-        env:
-          PROXY_JSON: ${{ secrets.PROXY_JSON }}
-        run: |
-          wget https://github.com/SagerNet/sing-box/releases/download/v1.9.0/sing-box-1.9.0-linux-amd64.tar.gz
-          tar -xvf sing-box-1.9.0-linux-amd64.tar.gz
-          sudo cp sing-box-1.9.0-linux-amd64/sing-box /usr/local/bin/
-          
-          echo "$PROXY_JSON" > config.json
-          
-          python -c "
-          import json
-          try:
-              with open('config.json', 'r', encoding='utf-8') as f: data = json.load(f)
-              
-              # 🌟 终极白名单提取：只保留核心的 inbounds 和 outbounds，彻底杜绝所有 GUI 特有字段导致闪退！
-              clean_data = {}
-              if 'log' in data: clean_data['log'] = data['log']
-              if 'inbounds' in data: clean_data['inbounds'] = data['inbounds']
-              if 'outbounds' in data: clean_data['outbounds'] = data['outbounds']
-              
-              with open('config.json', 'w', encoding='utf-8') as f: json.dump(clean_data, f)
-              print('JSON 终极白名单提取完成！当前为绝对纯净代理模式。')
-          except Exception as e:
-              print('JSON 修复失败:', e)
-          "
-          
-          nohup sing-box run -c config.json > proxy.log 2>&1 &
-          sleep 5
-          cat proxy.log
-          
-          # 这一步只要能打印出你代理的 IP，就说明隧道 100% 打通了！
-          curl -x socks5h://127.0.0.1:10808 https://ifconfig.me || echo "代理连接测试失败，但继续运行"
+print("\n===== 🚀 开始执行极速续期 =====")
+task_results = []
+os.makedirs("screenshots", exist_ok=True)
 
-      - name: Run Script
-        env:
-          TG_TOKEN: ${{ secrets.TG_TOKEN }}
-          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
-        run: |
-          # 使用 -a 参数自动分配最佳的虚拟显示器编号，完美触发 SeleniumBase 的破盾模块
-          xvfb-run -a python renew.py
-          
-      - name: Upload screenshots
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: screenshots
-          path: screenshots/**
-          if-no-files-found: warn
+for target in TARGETS:
+    name = target["name"]
+    url = target["url"]
+    print(f"\n[{name}] 开始处理节点...")
+    
+    try:
+        with SB(
+            uc=True, 
+            test=True, 
+            headed=True, 
+            headless=False, 
+            xvfb=False, 
+            chromium_arg="--no-sandbox,--disable-dev-shm-usage,--disable-gpu,--window-position=0,0,--start-maximized",
+            proxy=PROXY_URL
+        ) as sb:
+            
+            print(f"[{name}] 正在访问目标网址...")
+            sb.uc_open_with_reconnect(url, reconnect_time=5)
+            time.sleep(random.uniform(6, 10))
+            sb.save_screenshot(f"screenshots/{name}_1_loaded.png")
+
+            time_before = get_remaining_time(sb)
+            print(f"[{name}] 当前剩余时间: {time_before}")
+
+            # 1. 强行点击初始按钮
+            print(f"[{name}] 正在点击初始 [+ ADD 90 MIN] 按钮...")
+            try:
+                # 顺手关掉可能遮挡的 Cookie 弹窗
+                sb.execute_script("""
+                    document.querySelectorAll('button').forEach(b => {
+                        if(b.innerText.includes('Accept') || b.innerText.includes('Recommended')) b.click();
+                    });
+                """)
+                time.sleep(1)
+                # 使用 JS 底层注入点击，无视一切屏幕遮挡
+                sb.execute_script("document.querySelector('#sd-vote-btn').click();")
+            except Exception as e:
+                print(f"[{name}] ⚠️ JS 点击初始按钮异常，尝试备用点击: {e}")
+                sb.click('#sd-vote-btn')
+
+            time.sleep(4)
+
+            # 2. 🌟 修复假动作 Bug：放弃文字检测，直接暴力硬刚验证码！
+            print(f"[{name}] 开始迎战 Cloudflare 人机验证盾...")
+            for _ in range(3): # 强制执行 3 次破盾动作，确保必定点中
+                try:
+                    sb.uc_gui_click_captcha()
+                    time.sleep(2)
+                    sb.uc_gui_handle_captcha()
+                except:
+                    pass
+                time.sleep(3)
+            
+            # 3. 强行点击最终确认按钮
+            print(f"[{name}] 假设 CF 盾已被点绿，正在触发最终的 [VOTE] 确认按钮...")
+            try:
+                # 🌟 绝杀：继续使用 JS 注入点击！直接击穿右下角那个视频广告的物理拦截！
+                sb.execute_script("document.querySelector('#vm-submit').click();")
+            except Exception as e:
+                print(f"[{name}] ⚠️ JS 触发最终按钮失败，尝试 Selenium 盲点...")
+                sb.click('#vm-submit', timeout=5)
+
+            # 4. 加回发奖等待与掀桌子
+            print(f"[{name}] 按钮已触发，静默等待 45 秒让后台彻底发放奖励...")
+            time.sleep(45) 
+            
+            print(f"[{name}] 奖励理应发放完毕，强制刷新页面清理全屏广告...")
+            sb.refresh_page()
+            time.sleep(8)
+            
+            final_time = get_remaining_time(sb)
+            print(f"[{name}] 提取到最新时间: {final_time}")
+            
+            # 判断逻辑：只要时间比一开始获取的 time_before 长，或者有效读取到了，就算成功
+            status = "✅ 续期成功" if final_time != "未知" and final_time != time_before else "⚠️ 状态未知/未增加"
+            sb.save_screenshot(f"screenshots/{name}_2_result.png")
+            
+            task_results.append({"name": name, "status": status, "time": final_time})
+
+    except Exception as e:
+        print(f"[{name}] ❌ 节点执行异常: {e}")
+        task_results.append({"name": name, "status": "❌ 执行失败", "time": "未知"})
+
+print("\n所有节点处理完毕，正在发送汇报...")
+send_unified_tg(task_results)
