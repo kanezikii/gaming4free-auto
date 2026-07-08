@@ -1,11 +1,11 @@
-import os, sys, time, urllib.request, json, re, random
+import os
+import sys
+import time
+import urllib.request
+import json
+import random
 from seleniumbase import SB
 
-# ==========================================
-# 💡 G4F.GG 自动续期 (JS底层强点 + 暴力破盾必杀版)
-# ==========================================
-
-# 智能虚拟桌面环境配置 (完美适配 GitHub Actions)
 if "DISPLAY" not in os.environ:
     os.environ["DISPLAY"] = ":1"
 if "XAUTHORITY" not in os.environ:
@@ -21,45 +21,43 @@ TG_TOKEN = os.getenv("TG_TOKEN", "")
 TG_CHAT = os.getenv("TG_CHAT_ID", "")
 PROXY_URL = "socks5://127.0.0.1:10808"
 
-def send_unified_tg(results):
-    if TG_TOKEN and TG_CHAT:
-        try:
-            lines = ["🤖 G4F 续期综合汇报"]
-            for res in results:
-                lines.append("-----------------------")
-                lines.append(f"节点: {res['name']}")
-                lines.append(f"状态: {res['status']}")
-                lines.append(f"剩余时间: {res['time']}")
-            
-            msg = "\n".join(lines)
-            url = f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage"
-            data = json.dumps({"chat_id": TG_CHAT, "text": msg}).encode('utf-8')
-            req = urllib.request.Request(url, data=data, headers={'Content-Type': 'application/json'})
-            urllib.request.urlopen(req, timeout=10)
-            print("✅ Telegram 综合通知发送成功。")
-        except Exception as e:
-            print(f"❌ 发送通知失败: {e}")
+def send_tg(results):
+    if not TG_TOKEN or not TG_CHAT:
+        return
+    try:
+        lines = ["G4F Renew Status"]
+        for res in results:
+            lines.append("-----------------------")
+            lines.append(f"Node: {res['name']}")
+            lines.append(f"Status: {res['status']}")
+            lines.append(f"Time: {res['time']}")
+        msg = "\n".join(lines)
+        url = f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage"
+        data = json.dumps({"chat_id": TG_CHAT, "text": msg}).encode('utf-8')
+        req = urllib.request.Request(url, data=data, headers={'Content-Type': 'application/json'})
+        urllib.request.urlopen(req, timeout=10)
+    except Exception as e:
+        print(f"TG Error: {e}")
 
-def get_remaining_time(sb):
-    """通过官方专属 ID 获取精准时间"""
+def get_time(sb):
     try:
         sb.wait_for_element_visible('#sd-timer', timeout=15)
         time.sleep(1)
         return sb.get_text('#sd-timer').strip()
     except:
         try:
-            return sb.execute_script("let el = document.querySelector('#sd-timer'); return el ? el.innerText.trim() : '未知';")
+            return sb.execute_script("let el = document.querySelector('#sd-timer'); return el ? el.innerText.trim() : 'Unknown';")
         except:
-            return "未知"
+            return "Unknown"
 
-print("\n===== 🚀 开始执行极速续期 =====")
+print("Task started")
 task_results = []
 os.makedirs("screenshots", exist_ok=True)
 
 for target in TARGETS:
     name = target["name"]
     url = target["url"]
-    print(f"\n[{name}] 开始处理节点...")
+    print(f"[{name}] Process started")
     
     try:
         with SB(
@@ -72,35 +70,35 @@ for target in TARGETS:
             proxy=PROXY_URL
         ) as sb:
             
-            print(f"[{name}] 正在访问目标网址...")
+            print(f"[{name}] Loading page")
             sb.uc_open_with_reconnect(url, reconnect_time=5)
             time.sleep(random.uniform(6, 10))
             sb.save_screenshot(f"screenshots/{name}_1_loaded.png")
 
-            time_before = get_remaining_time(sb)
-            print(f"[{name}] 当前剩余时间: {time_before}")
+            time_before = get_time(sb)
+            print(f"[{name}] Initial time: {time_before}")
 
-            # 1. 强行点击初始按钮
-            print(f"[{name}] 正在点击初始 [+ ADD 90 MIN] 按钮...")
+            print(f"[{name}] Step 1: Initial click")
             try:
-                # 顺手关掉可能遮挡的 Cookie 弹窗
                 sb.execute_script("""
                     document.querySelectorAll('button').forEach(b => {
-                        if(b.innerText.includes('Accept') || b.innerText.includes('Recommended')) b.click();
+                        if(b.innerText.includes('Accept') || b.innerText.includes('Recommended')) {
+                            b.click();
+                        }
                     });
                 """)
                 time.sleep(1)
-                # 使用 JS 底层注入点击，无视一切屏幕遮挡
                 sb.execute_script("document.querySelector('#sd-vote-btn').click();")
-            except Exception as e:
-                print(f"[{name}] ⚠️ JS 点击初始按钮异常，尝试备用点击: {e}")
-                sb.click('#sd-vote-btn')
+            except:
+                try:
+                    sb.click('#sd-vote-btn')
+                except:
+                    pass
 
             time.sleep(4)
 
-            # 2. 🌟 修复假动作 Bug：放弃文字检测，直接暴力硬刚验证码！
-            print(f"[{name}] 开始迎战 Cloudflare 人机验证盾...")
-            for _ in range(3): # 强制执行 3 次破盾动作，确保必定点中
+            print(f"[{name}] Step 2: Captcha")
+            for _ in range(3):
                 try:
                     sb.uc_gui_click_captcha()
                     time.sleep(2)
@@ -109,35 +107,36 @@ for target in TARGETS:
                     pass
                 time.sleep(3)
             
-            # 3. 强行点击最终确认按钮
-            print(f"[{name}] 假设 CF 盾已被点绿，正在触发最终的 [VOTE] 确认按钮...")
+            print(f"[{name}] Step 3: Submit")
             try:
-                # 🌟 绝杀：继续使用 JS 注入点击！直接击穿右下角那个视频广告的物理拦截！
                 sb.execute_script("document.querySelector('#vm-submit').click();")
-            except Exception as e:
-                print(f"[{name}] ⚠️ JS 触发最终按钮失败，尝试 Selenium 盲点...")
-                sb.click('#vm-submit', timeout=5)
+            except:
+                try:
+                    sb.click('#vm-submit', timeout=5)
+                except:
+                    pass
 
-            # 4. 加回发奖等待与掀桌子
-            print(f"[{name}] 按钮已触发，静默等待 45 秒让后台彻底发放奖励...")
+            print(f"[{name}] Step 4: Wait for reward (45s)")
             time.sleep(45) 
             
-            print(f"[{name}] 奖励理应发放完毕，强制刷新页面清理全屏广告...")
+            print(f"[{name}] Step 5: Refresh")
             sb.refresh_page()
             time.sleep(8)
             
-            final_time = get_remaining_time(sb)
-            print(f"[{name}] 提取到最新时间: {final_time}")
+            final_time = get_time(sb)
+            print(f"[{name}] Final time: {final_time}")
             
-            # 判断逻辑：只要时间比一开始获取的 time_before 长，或者有效读取到了，就算成功
-            status = "✅ 续期成功" if final_time != "未知" and final_time != time_before else "⚠️ 状态未知/未增加"
+            if final_time != "Unknown" and final_time != time_before:
+                status = "Success"
+            else:
+                status = "Unknown/Failed"
+                
             sb.save_screenshot(f"screenshots/{name}_2_result.png")
-            
             task_results.append({"name": name, "status": status, "time": final_time})
 
     except Exception as e:
-        print(f"[{name}] ❌ 节点执行异常: {e}")
-        task_results.append({"name": name, "status": "❌ 执行失败", "time": "未知"})
+        print(f"[{name}] Exception: {e}")
+        task_results.append({"name": name, "status": "Error", "time": "Unknown"})
 
-print("\n所有节点处理完毕，正在发送汇报...")
-send_unified_tg(task_results)
+print("Task finished, sending notification")
+send_tg(task_results)
