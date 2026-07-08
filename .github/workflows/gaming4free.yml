@@ -11,59 +11,52 @@ jobs:
     timeout-minutes: 15
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
-      # =========================
-      # 🟡 1️⃣ 安装官方 WARP 客户端 (纯 SOCKS5 模式)
-      # =========================
-      - name: Setup Official WARP Proxy
-        run: |
-          # 导入 Cloudflare 官方源并安装
-          curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
-          echo "deb [arch=amd64 signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ jammy main" | sudo tee /etc/apt/sources.list.d/cloudflare-client.list
-          sudo apt-get update && sudo apt-get install -y cloudflare-warp
-          
-          # 注册并设置为纯代理模式 (默认占用 40000 端口，绝不断网)
-          warp-cli --accept-tos registration new
-          warp-cli --accept-tos mode proxy
-          warp-cli --accept-tos connect
-          
-          echo "⏳ 等待 WARP 隧道建立 (10秒)..."
-          sleep 10
-
-      - name: Install system deps
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y xvfb ffmpeg
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - name: Set up Python
+        uses: actions/setup-python@v4
         with:
-          python-version: '3.11'
-          
-      - name: Install Python packages
-        run: |
-          pip install seleniumbase SpeechRecognition pydub
-          sbase install chromium
+          python-version: '3.10'
 
-      # =========================
-      # 🟡 2️⃣ 运行脚本
-      # =========================
+      - name: Install dependencies
+        run: pip install seleniumbase
+
+      - name: Start Sing-box Proxy Node
+        env:
+          PROXY_JSON: ${{ secrets.PROXY_JSON }}
+        run: |
+          # 1. 下载 sing-box 内核
+          wget https://github.com/SagerNet/sing-box/releases/download/v1.9.0/sing-box-1.9.0-linux-amd64.tar.gz
+          tar -xvf sing-box-1.9.0-linux-amd64.tar.gz
+          sudo cp sing-box-1.9.0-linux-amd64/sing-box /usr/local/bin/
+          
+          # 2. 将 Secret 写入 config.json
+          echo "$PROXY_JSON" > config.json
+
+          python -c "
+          import json
+          with open('config.json', 'r') as f: data = json.load(f)
+          if 'route' in data and 'rule_set' in data['route']:
+              data['route']['rule_set'] = []
+          with open('config.json', 'w') as f: json.dump(data, f)
+          "
+          
+          # 3. 后台启动代理客户端
+          nohup sing-box run -c config.json > proxy.log 2>&1 &
+          
+          # 4. 等待代理启动并验证
+          sleep 5
+          curl -x socks5h://127.0.0.1:10808 https://ifconfig.me || echo "代理连接测试失败，但继续运行"
+      # 👆 --------------------------------- 👆
+
       - name: Run script
         env:
-          MC_USERNAME: ${{ secrets.MC_USERNAME }}
-          TG_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_TOKEN: ${{ secrets.TG_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
         run: |
-          mkdir -p screenshots
-          
-          echo "🌍 验证 WARP SOCKS5 代理 IP:"
-          # 这次绝对能成功连上 40000 端口并打印出 WARP IP
-          curl -s -x socks5://127.0.0.1:40000 https://api.ipify.org || echo "⚠️ IP获取失败"
-          echo ""
-          
-          # 启动虚拟桌面并运行无敌的 Python 打码脚本
-          xvfb-run -a python renew.py
+          # 虚拟桌面运行 Python
+          xvfb-run python renew.py
           
       - name: Upload screenshots
         uses: actions/upload-artifact@v4
