@@ -34,21 +34,37 @@ jobs:
           # 2. 将 Secret 写入 config.json
           echo "$PROXY_JSON" > config.json
 
+          # 3. 🌟 终极 JSON 净化手术：彻底清除 D 盘路径和空引用
           python -c "
           import json
-          with open('config.json', 'r') as f: data = json.load(f)
-          if 'route' in data and 'rule_set' in data['route']:
-              data['route']['rule_set'] = []
-          with open('config.json', 'w') as f: json.dump(data, f)
+          try:
+              with open('config.json', 'r', encoding='utf-8') as f: data = json.load(f)
+              
+              # 切除 1：删除实验性配置中的本地缓存路径 (包含 D 盘路径)
+              if 'experimental' in data and 'cache_file' in data['experimental']:
+                  del data['experimental']['cache_file']
+                  
+              if 'route' in data:
+                  # 切除 2：彻底删除 rule_set 规则集定义 (包含 D 盘路径)
+                  if 'rule_set' in data['route']:
+                      del data['route']['rule_set']
+                  # 切除 3：删除引用了 rule_set 的路由规则，防止启动报 '规则不存在' 的致命错误
+                  if 'rules' in data['route']:
+                      data['route']['rules'] = [r for r in data['route']['rules'] if 'rule_set' not in r]
+                      
+              with open('config.json', 'w', encoding='utf-8') as f: json.dump(data, f)
+              print('JSON 净化手术完成！')
+          except Exception as e:
+              print('JSON 修复失败:', e)
           "
           
-          # 3. 后台启动代理客户端
+          # 4. 后台启动代理客户端
           nohup sing-box run -c config.json > proxy.log 2>&1 &
           
-          # 4. 等待代理启动并验证
+          # 5. 等待代理启动并验证
           sleep 5
+          cat proxy.log # 打印后台日志，方便排错
           curl -x socks5h://127.0.0.1:10808 https://ifconfig.me || echo "代理连接测试失败，但继续运行"
-      # 👆 --------------------------------- 👆
 
       - name: Run script
         env:
