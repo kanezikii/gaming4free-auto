@@ -38,16 +38,14 @@ jobs:
         unzip -q Xray-linux-64.zip -d xray
         chmod +x xray/xray
         
-        # 使用更安全的 EOF 方式写入多行 JSON，防止格式被破坏
-        cat << 'EOF' > xray/config.json
-        $XRAY_CONFIG
-        EOF
+        # 使用 printenv 完美写入配置，避免任何符号转义问题
+        printenv XRAY_CONFIG > xray/config.json
         
         # 后台启动 Xray
         nohup ./xray/xray run -c xray/config.json > xray.log 2>&1 &
         sleep 5
         
-        # 检查 Xray 进程是否存活，如果挂了就打印具体报错日志
+        # 检查 Xray 进程是否存活
         if ! pgrep -x "xray" > /dev/null; then
             echo "❌ Xray 进程未启动或已崩溃！查看报错日志："
             cat xray.log
