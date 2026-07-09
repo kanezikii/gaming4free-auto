@@ -42,6 +42,8 @@ class Game4FreeRenewal:
     def move_mouse_human(self, sb):
         try:
             for _ in range(3):
+                x = random.randint(100, 800)
+                y = random.randint(100, 600)
                 sb.slow_click("body", force=True)
                 time.sleep(random.uniform(0.5, 1.2))
         except:
@@ -53,7 +55,7 @@ class Game4FreeRenewal:
             sb.wait_for_element_visible('#sd-timer', timeout=15)
             time.sleep(1)
             remaining_text = sb.get_text('#sd-timer').strip()
-        except:
+        except Exception as e:
             try:
                 remaining_text = sb.execute_script("""
                     var el = document.querySelector('#sd-timer');
@@ -103,6 +105,18 @@ class Game4FreeRenewal:
             proxy=PROXY_URL
         ) as sb:
             try:
+                self.log("✅ 浏览器已启动！")
+                
+                # 恢复 IP 检测，便于排查代理节点是否正常工作
+                self.log("🌍 正在检测出口 IP...")
+                try:
+                    sb.open("https://api.ipify.org?format=json")
+                    ip_val = json.loads(re.search(r'\{.*\}', sb.get_text("body")).group(0)).get('ip', 'Unknown')
+                    parts = ip_val.split('.')
+                    self.log(f"✅ 当前出口 IP: {parts[0]}.{parts[1]}.***.{parts[-1]}")
+                except:
+                    self.log("⚠️ IP 检测跳过...")
+
                 self.log(f"📂 正在访问目标网址...")
                 sb.uc_open_with_reconnect(URL_APP_PANEL, reconnect_time=5)
                 self.human_wait(6, 10)
@@ -124,13 +138,11 @@ class Game4FreeRenewal:
                             break
                         except:
                             pass
-                self.human_wait(3, 5)
 
                 timestamp_before = self.get_remaining_time(sb)
                 self.log(f"🕒 初始时间: {timestamp_before}")
 
-                # ================== 核心动作 1：向下滚动并点击 ==================
-                # 🌟 修复：强制滚动到屏幕 1/3 的黄金中间位置，确保核心面板在可视区中央
+                # 黄金居中滚动：确保面板完美处于中心 (事实证明这行极其有效，保留！)
                 sb.execute_script("window.scrollTo(0, document.body.scrollHeight / 3);")
                 
                 try:
@@ -145,7 +157,6 @@ class Game4FreeRenewal:
                     self.task_results.append({"name": region, "status": "❌ 失败 (初始按钮)", "time": "未知"})
                     return
 
-                # ================== 核心动作 2：验证 Cloudflare ==================
                 self.log("⏳ 开始迎战 Cloudflare...")
                 cf_indicators = ["verify you are human", "确认您是真人", "troubleshoot", "just a moment"]
                 for _ in range(10):
@@ -160,7 +171,6 @@ class Game4FreeRenewal:
                         self.log("✅ Cloudflare 验证通过")
                         break
 
-                # ================== 核心动作 3：最终确认点击 ==================
                 try:
                     self.log("🖱️ 正在触发最终确认按钮...")
                     self.move_mouse_human(sb)
@@ -173,18 +183,20 @@ class Game4FreeRenewal:
                     self.task_results.append({"name": region, "status": "❌ 失败 (确认按钮)", "time": "未知"})
                     return
 
-                # 等待奖励并刷新
-                self.log("⏳ 等待 45 秒奖励发放...")
+                self.log("⏳ 静默等待 45 秒，让视频广告在后台跑完发放奖励 (严禁刷新页面)...")
                 time.sleep(45)
-                sb.refresh_page()
-                time.sleep(10)
 
+                # 直接提取原网页动态更新后的时间
                 timestamp_after = self.get_remaining_time(sb)
-                self.log(f"🕒 更新时间: {timestamp_after}")
+                self.log(f"🕒 最终更新时间: {timestamp_after}")
                 
                 sb.save_screenshot(f"{self.screenshot_dir}/{region}_final_result.png")
-
-                status = "✅ 成功" if timestamp_after != "未知" and timestamp_after != timestamp_before else "⚠️ 未知/未增加"
+                
+                if timestamp_after != "未知" and timestamp_after != timestamp_before:
+                    status = "✅ 成功"
+                else:
+                    status = "⚠️ 失败/未增加"
+                    
                 self.task_results.append({"name": region, "status": status, "time": timestamp_after})
 
             except Exception as e:
