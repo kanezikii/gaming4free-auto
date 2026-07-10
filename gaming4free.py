@@ -140,7 +140,6 @@ class Game4FreeRenewal:
             uc=True,
             test=True,
             headed=True,
-            anti_bot=True,  # 开启反反爬增强模式
             headless=False,
             xvfb=False,
             chromium_arg=f"--no-sandbox,--disable-dev-shm-usage,--disable-gpu,--window-position=0,0,--start-maximized,--disable-blink-features=AutomationControlled,--disable-infobars,--disable-popup-blocking,--user-agent={USER_AGENT}",
