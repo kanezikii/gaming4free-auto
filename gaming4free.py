@@ -53,19 +53,6 @@ class Game4FreeRenewal:
         except:
             return 0
 
-    def remove_ads(self, sb):
-        """强力清理页面广告，防止遮挡 CF 验证码和点击按钮"""
-        try:
-            sb.execute_script("""
-                var ads = document.querySelectorAll('ins, iframe[src*="google"], iframe[src*="doubleclick"], div[id^="google_ads"], div[class*="ad-"], div[id^="ad_"]');
-                for (var i = 0; i < ads.length; i++) {
-                    ads[i].remove();
-                }
-            """)
-            self.log("🧹 已强制清理悬浮广告，防止拦截鼠标点击。")
-        except:
-            pass
-
     def move_mouse_human_advanced(self, sb):
         """生成更复杂的随机鼠标移动轨迹"""
         try:
@@ -169,7 +156,6 @@ class Game4FreeRenewal:
                 if "login" in sb.get_current_url().lower():
                     raise Exception("登录状态失效或权限被拒绝。")
 
-                # 关闭各类 Cookies 提示
                 cookie_btns = ['//button[contains(., "Continue with Recommended Cookies")]', '//button[contains(., "Accept")]', '//button[contains(., "I Agree")]', '//button[contains(., "Consent")]']
                 for btn in cookie_btns:
                     if sb.is_element_present(btn):
@@ -179,15 +165,12 @@ class Game4FreeRenewal:
                         except:
                             pass
 
-                # 获取续期前时间
                 timestamp_before = self.get_remaining_time(sb)
                 self.log(f"🕒 续期前剩余运行时间: {timestamp_before}")
 
                 sb.execute_script("window.scrollBy(0,800);")
                 self.human_wait(2, 4)
                 
-                self.remove_ads(sb)
-
                 try:
                     self.log("🖱️ 正在使用人类轨迹点击 'VOTE + ADD 90 MIN'...")
                     self.move_mouse_human_advanced(sb)
@@ -197,15 +180,12 @@ class Game4FreeRenewal:
                     raise Exception(f"未找到打开模态框的按钮: {e}")
 
                 # ========================================================
-                # 💥 核心修改区：超强 Cloudflare Turnstile 对抗逻辑
+                # 💥 核心修改区：挂机等待视频广告播放完毕
                 # ========================================================
-                self.log("⏳ 给模态框和验证码预留 5 秒的加载时间...")
-                time.sleep(5) 
-                
-                self.remove_ads(sb)
+                self.log("⏳ 网站要求观看视频广告。正在挂机等待 35 秒，让广告飞一会儿...")
+                time.sleep(35) 
                 
                 try:
-                    # 强行把弹出来的提交按钮滚动到屏幕正中央，确保上方的验证码一定在可视范围内！
                     sb.execute_script("document.querySelector('#vm-submit').scrollIntoView({block: 'center'});")
                     time.sleep(1)
                 except:
@@ -213,57 +193,50 @@ class Game4FreeRenewal:
 
                 self.log("📡 开始雷达扫描页面底层的 Cloudflare 元素...")
                 cf_found = False
-                
-                # 循环扫描 5 次，确保不会因为网络延迟漏掉
                 for _ in range(5):
-                    # 使用 JS 穿透查询，寻找验证框 Iframe 或 CF 生成的隐形凭证框
                     if sb.execute_script("return !!document.querySelector('iframe[src*=\"challenges.cloudflare.com\"], iframe[src*=\"turnstile\"], [name=\"cf-turnstile-response\"]')"):
                         cf_found = True
                         break
                     time.sleep(1)
 
                 if cf_found:
-                    self.log("🛡️ 成功锁定 Cloudflare 验证框，开始执行物理鼠标点击突破...")
+                    self.log("🛡️ 锁定 Cloudflare 验证框，执行点击...")
                     for attempt in range(3):
                         try:
-                            # 调动虚拟显示器 Xvfb 的底层鼠标进行真实的 GUI 点击
                             sb.uc_gui_click_captcha()
                             time.sleep(4)
-                            
-                            # 终极校验：读取 DOM，如果有了凭证值，说明一定点成功了
                             token = sb.execute_script("return document.querySelector('[name=\"cf-turnstile-response\"]') ? document.querySelector('[name=\"cf-turnstile-response\"]').value : ''")
                             if token:
-                                self.log("✅ Turnstile 验证已成功，顺利获取 Token 凭证！")
+                                self.log("✅ Turnstile 验证已成功获取凭证！")
                                 break
                         except Exception as e:
                             self.log(f"⚠️ 破解尝试 {attempt+1} 出现小偏差，继续重试...")
                         time.sleep(2)
                 else:
-                    self.log("✅ 深度扫描未发现验证框，当前 IP 免检。")
+                    self.log("✅ 扫描未发现验证框，当前 IP 免检。")
                 # ========================================================
 
                 self.human_wait(2, 4)
 
                 try:
                     self.log("🖱️ 正在点击最终提交按钮 'VOTE — ADDS 90 MINUTES'...")
-                    sb.wait_for_element_visible("#vm-submit", timeout=10)
+                    # 确保按钮不仅可见，还要处于可点击的激活状态（防广告遮挡或倒计时锁定）
+                    sb.wait_for_element_clickable("#vm-submit", timeout=15)
                     sb.click('#vm-submit')
                     self.human_wait(8, 12)
                 except Exception as e:
-                    raise Exception("未能点击最终的确认提交按钮。")
+                    raise Exception("未能点击最终的确认提交按钮，可能是广告仍未加载完成导致按钮未激活。")
 
                 time.sleep(8)
                 
-                # 获取续期后时间
                 timestamp_after = self.get_remaining_time(sb)
                 self.log(f"🕒 续期后剩余运行时间: {timestamp_after}")
 
-                # 严格校验续期是否真实生效
                 sec_before = self.time_to_seconds(timestamp_before)
                 sec_after = self.time_to_seconds(timestamp_after)
                 
                 if sec_after > 0 and sec_before > 0:
-                    if sec_after <= sec_before + 120:  # 允许最多 2 分钟的容差
+                    if sec_after <= sec_before + 120:  
                         raise Exception("时间并未增加！人机验证失败或提交请求被服务器拦截。")
 
                 final_screenshot = f"{self.screenshot_dir}/final_success_{server_num}.png"
