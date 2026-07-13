@@ -172,17 +172,14 @@ class Game4FreeRenewal:
                 self.human_wait(2, 4)
                 
                 try:
-                    self.log("🖱️ 正在使用人类轨迹点击 'VOTE + ADD 90 MIN'...")
+                    self.log("🖱️ 正在迹点击 'VOTE + ADD 90 MIN'...")
                     self.move_mouse_human_advanced(sb)
                     sb.wait_for_element_visible("#sd-vote-btn", timeout=10)
                     sb.click('#sd-vote-btn')
                 except Exception as e:
                     raise Exception(f"未找到打开模态框的按钮: {e}")
 
-                # ========================================================
-                # 💥 核心修改区：挂机等待视频广告播放完毕
-                # ========================================================
-                self.log("⏳ 网站要求观看视频广告。正在挂机等待 35 秒，让广告飞一会儿...")
+                self.log("⏳ 观看视频广告...")
                 time.sleep(35) 
                 
                 try:
@@ -191,7 +188,7 @@ class Game4FreeRenewal:
                 except:
                     pass
 
-                self.log("📡 开始雷达扫描页面底层的 Cloudflare 元素...")
+                self.log("📡 开始扫描")
                 cf_found = False
                 for _ in range(5):
                     if sb.execute_script("return !!document.querySelector('iframe[src*=\"challenges.cloudflare.com\"], iframe[src*=\"turnstile\"], [name=\"cf-turnstile-response\"]')"):
