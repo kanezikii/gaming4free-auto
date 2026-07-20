@@ -180,60 +180,53 @@ class Game4FreeRenewal:
                     raise Exception(f"未找到打开模态框的按钮: {e}")
 
                 # ========================================================
-                # 💥 增强版防线：等待视频广告 -> 穿透点击 -> 验证令牌
+                # 💥 最终防线：无视 DOM 隐藏，强制执行物理盲点破盾！
                 # ========================================================
-                self.log("⏳ 正在挂机等待 40 秒，确保底层视频广告播放完毕...")
-                time.sleep(40)  # 稍微延长至 40 秒，给网络缓冲留足余量
+                self.log("⏳ 正在挂机等待 42 秒，确保底层视频广告播放完毕...")
+                time.sleep(42)  
                 
-                self.log("📡 开始雷达扫描页面底层的 Cloudflare 元素...")
-                cf_iframe_selector = 'iframe[src*="challenges.cloudflare.com"], iframe[src*="turnstile"]'
-                cf_found = False
-                
-                for _ in range(5):
-                    if sb.is_element_present(cf_iframe_selector):
-                        cf_found = True
-                        break
+                try:
+                    sb.execute_script("document.querySelector('#vm-submit').scrollIntoView({block: 'center'});")
                     time.sleep(1)
+                except:
+                    pass
 
-                if cf_found:
-                    self.log("🛡️ 锁定 Cloudflare 验证框，开始执行精准穿透点击...")
-                    solved = False
+                self.log("🛡️ 启动 Cloudflare 强制破盾程序 (不依赖 DOM 扫描)...")
+                
+                token = ""
+                # 无论网页代码里藏得多深，直接执行 3 次物理级打勾尝试
+                for attempt in range(3):
+                    self.log(f"⚡ 释放组合破盾术 (尝试 {attempt+1}/3)...")
                     
-                    for attempt in range(3):
-                        try:
-                            # 核心改动：使用 uc_click 进行底层物理坐标精准打击
-                            sb.uc_click(cf_iframe_selector, reconnect_time=3)
-                            self.log(f"⚡ 已下发点击指令 (尝试 {attempt+1}/3)，等待验证响应...")
-                            time.sleep(5)
-                            
-                            # 严格校验：去底层 DOM 里挖验证令牌
-                            token = sb.execute_script("return document.querySelector('[name=\"cf-turnstile-response\"]') ? document.querySelector('[name=\"cf-turnstile-response\"]').value : ''")
-                            
-                            if token:
-                                self.log("✅ 破盾成功！已拿到 Cloudflare 验证凭证。")
-                                solved = True
-                                break
-                            else:
-                                self.log("⚠️ 凭证仍为空，验证码可能还在转圈或点击未生效，准备重试...")
-                                # 备用：传统 GUI 瞎点法兜底
-                                sb.uc_gui_click_captcha()
-                                time.sleep(3)
-                        except Exception as e:
-                            self.log(f"⚠️ 破解尝试异常: {e}")
+                    try:
+                        # 招式 1: 模糊选择器强穿透点击
+                        sb.uc_click('iframe[title*="Cloudflare"], iframe[title*="Widget"], iframe[src*="turnstile"], .cf-turnstile iframe', timeout=3)
+                    except:
+                        pass
                         
-                        time.sleep(2)
+                    try:
+                        # 招式 2: Xvfb 虚拟鼠标绝对坐标盲点 (官方绝杀)
+                        sb.uc_gui_click_captcha()
+                    except:
+                        pass
+                        
+                    time.sleep(4)
                     
-                    # 💥 拦截逻辑：如果拿不到令牌，直接报错退出，绝不盲目去点最终提交按钮
-                    if not solved:
-                        raise Exception("❌ Cloudflare 验证彻底失败，无法打勾。为保护 IP，终止提交流程。")
-                else:
-                    self.log("✅ 扫描未发现验证框，当前 IP 免检。")
+                    # 摸底检查：看看令牌拿到没有
+                    token = sb.execute_script("return document.querySelector('[name=\"cf-turnstile-response\"]') ? document.querySelector('[name=\"cf-turnstile-response\"]').value : ''")
+                    
+                    if token:
+                        self.log("✅ 破盾成功！已拿到 Cloudflare 隐藏验证凭证。")
+                        break
+                
+                if not token:
+                    self.log("⚠️ 尝试 3 次后仍未在表单发现显式凭证，可能已免检，直接强行提交！")
                 # ========================================================
 
                 self.human_wait(2, 4)
 
                 try:
-                    self.log("🖱️ 验证通过！正在点击最终提交按钮 'VOTE — ADDS 90 MINUTES'...")
+                    self.log("🖱️ 正在点击最终提交按钮 'VOTE — ADDS 90 MINUTES'...")
                     sb.wait_for_element_clickable("#vm-submit", timeout=15)
                     sb.click('#vm-submit')
                     self.human_wait(8, 12)
@@ -250,7 +243,7 @@ class Game4FreeRenewal:
                 
                 if sec_after > 0 and sec_before > 0:
                     if sec_after <= sec_before + 120:  
-                        raise Exception("❌ 严重异常：令牌提交成功但时间未增加，可能是广告策略变动或服务器拒绝了请求。")
+                        raise Exception("❌ 严重异常：时间未增加！由于未成功点击人机验证或广告未放完被服务器拦截。")
 
                 final_screenshot = f"{self.screenshot_dir}/final_success_{server_num}.png"
                 sb.save_screenshot(final_screenshot)
