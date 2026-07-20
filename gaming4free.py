@@ -135,7 +135,7 @@ class Game4FreeRenewal:
             headed=True,
             headless=False,
             xvfb=False,
-            chromium_arg=f"--no-sandbox,--disable-dev-shm-usage,--disable-gpu,--window-position=0,0,--start-maximized,--disable-blink-features=AutomationControlled,--disable-infobars,--disable-popup-blocking,--user-agent={USER_AGENT}",
+            chromium_arg=f"--no-sandbox,--disable-dev-shm-usage,--disable-gpu,--window-position=0,0,--window-size=1280,720,--disable-blink-features=AutomationControlled,--disable-infobars,--disable-popup-blocking,--user-agent={USER_AGENT}",
             proxy=PROXY_URL if PROXY_URL else None
         ) as sb:
             try:
@@ -180,7 +180,7 @@ class Game4FreeRenewal:
                     raise Exception(f"未找到打开模态框的按钮: {e}")
 
                 # ========================================================
-                # 💥 最终防线：无视 DOM 隐藏，强制执行物理盲点破盾！
+                # 💥 最终防线：键盘焦点转移法 (Tab + Space)
                 # ========================================================
                 self.log("⏳ 正在挂机等待 42 秒，确保底层视频广告播放完毕...")
                 time.sleep(42)  
@@ -191,33 +191,46 @@ class Game4FreeRenewal:
                 except:
                     pass
 
-                self.log("🛡️ 启动 Cloudflare 强制破盾程序 (不依赖 DOM 扫描)...")
+                self.log("🛡️ 启动 Cloudflare 键盘物理破盾程序 (无视坐标错位)...")
                 
+                import pyautogui
                 token = ""
-                # 无论网页代码里藏得多深，直接执行 3 次物理级打勾尝试
+                
                 for attempt in range(3):
-                    self.log(f"⚡ 释放组合破盾术 (尝试 {attempt+1}/3)...")
+                    self.log(f"⚡ 释放 Tab+Space 组合拳 (尝试 {attempt+1}/3)...")
                     
                     try:
-                        # 招式 1: 模糊选择器强穿透点击
-                        sb.uc_click('iframe[title*="Cloudflare"], iframe[title*="Widget"], iframe[src*="turnstile"], .cf-turnstile iframe', timeout=3)
-                    except:
-                        pass
+                        # 1. 点击模态框里的用户名输入框，获取初始焦点
+                        self.log("   -> 定位用户名输入框焦点...")
+                        sb.click('input[type="text"]', timeout=3)
+                        time.sleep(1.5)
                         
-                    try:
-                        # 招式 2: Xvfb 虚拟鼠标绝对坐标盲点 (官方绝杀)
-                        sb.uc_gui_click_captcha()
-                    except:
-                        pass
+                        # 2. 按下 Tab 键，系统焦点会自动跳到下一个元素（即 CF 验证框）
+                        self.log("   -> 按下 Tab 键转移焦点...")
+                        pyautogui.press('tab')
+                        time.sleep(1)
                         
-                    time.sleep(4)
+                        # 3. 按下空格键，物理触发勾选！
+                        self.log("   -> 按下 Space 空格键触发点击！")
+                        pyautogui.press('space')
+                    except Exception as e:
+                        self.log(f"⚠️ 键盘模拟出现小意外: {e}")
+                        
+                    time.sleep(5)
                     
                     # 摸底检查：看看令牌拿到没有
                     token = sb.execute_script("return document.querySelector('[name=\"cf-turnstile-response\"]') ? document.querySelector('[name=\"cf-turnstile-response\"]').value : ''")
                     
                     if token:
-                        self.log("✅ 破盾成功！已拿到 Cloudflare 隐藏验证凭证。")
+                        self.log("✅ 破盾成功！键盘组合拳已成功获取验证凭证。")
                         break
+                    else:
+                        # 备用方案：如果键盘失败，再尝试一次官方的 GUI 坐标点击兜底
+                        try:
+                            self.log("   -> 尝试备用坐标点击...")
+                            sb.uc_gui_click('iframe[src*="challenges.cloudflare.com"], iframe[src*="turnstile"]')
+                        except:
+                            pass
                 
                 if not token:
                     self.log("⚠️ 尝试 3 次后仍未在表单发现显式凭证，可能已免检，直接强行提交！")
@@ -226,7 +239,7 @@ class Game4FreeRenewal:
                 self.human_wait(2, 4)
 
                 try:
-                    self.log("🖱️ 正在点击最终提交按钮 'VOTE — ADDS 90 MINUTES'...")
+                    self.log("🖱️ 验证流程结束！正在点击最终提交按钮 'VOTE — ADDS 90 MINUTES'...")
                     sb.wait_for_element_clickable("#vm-submit", timeout=15)
                     sb.click('#vm-submit')
                     self.human_wait(8, 12)
