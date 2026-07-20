@@ -46,7 +46,7 @@ class Game4FreeRenewal:
         time.sleep(random.uniform(min_s, max_s))
 
     def time_to_seconds(self, t_str):
-        """将 HH:MM:SS 格式转换为秒数，用于严格校验续期是否生效"""
+        """将 HH:MM:SS 格式转换为秒数"""
         try:
             h, m, s = map(int, t_str.strip().split(':'))
             return h * 3600 + m * 60 + s
@@ -54,7 +54,7 @@ class Game4FreeRenewal:
             return 0
 
     def move_mouse_human_advanced(self, sb):
-        """生成更复杂的随机鼠标移动轨迹"""
+        """生成随机鼠标移动轨迹"""
         try:
             time.sleep(random.uniform(0.1, 0.4))
             width = sb.execute_script("return window.innerWidth;")
@@ -93,7 +93,7 @@ class Game4FreeRenewal:
             sb.wait_for_element_visible('#sd-timer', timeout=15)
             time.sleep(1)
             remaining_text = sb.get_text('#sd-timer').strip()
-        except Exception as e:
+        except Exception:
             try:
                 remaining_text = sb.execute_script("""
                     var el = document.querySelector('#sd-timer');
@@ -172,43 +172,60 @@ class Game4FreeRenewal:
                 self.human_wait(2, 4)
                 
                 try:
-                    self.log("🖱️ 正在迹点击 'VOTE + ADD 90 MIN'...")
+                    self.log("🖱️ 正在点击 'VOTE + ADD 90 MIN'...")
                     self.move_mouse_human_advanced(sb)
                     sb.wait_for_element_visible("#sd-vote-btn", timeout=10)
                     sb.click('#sd-vote-btn')
                 except Exception as e:
                     raise Exception(f"未找到打开模态框的按钮: {e}")
 
-                self.log("⏳ 观看视频广告...")
-                time.sleep(35) 
+                # ========================================================
+                # 💥 增强版防线：等待视频广告 -> 穿透点击 -> 验证令牌
+                # ========================================================
+                self.log("⏳ 正在挂机等待 40 秒，确保底层视频广告播放完毕...")
+                time.sleep(40)  # 稍微延长至 40 秒，给网络缓冲留足余量
                 
-                try:
-                    sb.execute_script("document.querySelector('#vm-submit').scrollIntoView({block: 'center'});")
-                    time.sleep(1)
-                except:
-                    pass
-
-                self.log("📡 开始扫描")
+                self.log("📡 开始雷达扫描页面底层的 Cloudflare 元素...")
+                cf_iframe_selector = 'iframe[src*="challenges.cloudflare.com"], iframe[src*="turnstile"]'
                 cf_found = False
+                
                 for _ in range(5):
-                    if sb.execute_script("return !!document.querySelector('iframe[src*=\"challenges.cloudflare.com\"], iframe[src*=\"turnstile\"], [name=\"cf-turnstile-response\"]')"):
+                    if sb.is_element_present(cf_iframe_selector):
                         cf_found = True
                         break
                     time.sleep(1)
 
                 if cf_found:
-                    self.log("🛡️ 锁定 Cloudflare 验证框，执行点击...")
+                    self.log("🛡️ 锁定 Cloudflare 验证框，开始执行精准穿透点击...")
+                    solved = False
+                    
                     for attempt in range(3):
                         try:
-                            sb.uc_gui_click_captcha()
-                            time.sleep(4)
+                            # 核心改动：使用 uc_click 进行底层物理坐标精准打击
+                            sb.uc_click(cf_iframe_selector, reconnect_time=3)
+                            self.log(f"⚡ 已下发点击指令 (尝试 {attempt+1}/3)，等待验证响应...")
+                            time.sleep(5)
+                            
+                            # 严格校验：去底层 DOM 里挖验证令牌
                             token = sb.execute_script("return document.querySelector('[name=\"cf-turnstile-response\"]') ? document.querySelector('[name=\"cf-turnstile-response\"]').value : ''")
+                            
                             if token:
-                                self.log("✅ Turnstile 验证已成功获取凭证！")
+                                self.log("✅ 破盾成功！已拿到 Cloudflare 验证凭证。")
+                                solved = True
                                 break
+                            else:
+                                self.log("⚠️ 凭证仍为空，验证码可能还在转圈或点击未生效，准备重试...")
+                                # 备用：传统 GUI 瞎点法兜底
+                                sb.uc_gui_click_captcha()
+                                time.sleep(3)
                         except Exception as e:
-                            self.log(f"⚠️ 破解尝试 {attempt+1} 出现小偏差，继续重试...")
+                            self.log(f"⚠️ 破解尝试异常: {e}")
+                        
                         time.sleep(2)
+                    
+                    # 💥 拦截逻辑：如果拿不到令牌，直接报错退出，绝不盲目去点最终提交按钮
+                    if not solved:
+                        raise Exception("❌ Cloudflare 验证彻底失败，无法打勾。为保护 IP，终止提交流程。")
                 else:
                     self.log("✅ 扫描未发现验证框，当前 IP 免检。")
                 # ========================================================
@@ -216,15 +233,14 @@ class Game4FreeRenewal:
                 self.human_wait(2, 4)
 
                 try:
-                    self.log("🖱️ 正在点击最终提交按钮 'VOTE — ADDS 90 MINUTES'...")
-                    # 确保按钮不仅可见，还要处于可点击的激活状态（防广告遮挡或倒计时锁定）
+                    self.log("🖱️ 验证通过！正在点击最终提交按钮 'VOTE — ADDS 90 MINUTES'...")
                     sb.wait_for_element_clickable("#vm-submit", timeout=15)
                     sb.click('#vm-submit')
                     self.human_wait(8, 12)
                 except Exception as e:
-                    raise Exception("未能点击最终的确认提交按钮，可能是广告仍未加载完成导致按钮未激活。")
+                    raise Exception("未能点击最终的确认提交按钮，可能是按钮未激活。")
 
-                time.sleep(8)
+                time.sleep(10)
                 
                 timestamp_after = self.get_remaining_time(sb)
                 self.log(f"🕒 续期后剩余运行时间: {timestamp_after}")
@@ -234,7 +250,7 @@ class Game4FreeRenewal:
                 
                 if sec_after > 0 and sec_before > 0:
                     if sec_after <= sec_before + 120:  
-                        raise Exception("时间并未增加！人机验证失败或提交请求被服务器拦截。")
+                        raise Exception("❌ 严重异常：令牌提交成功但时间未增加，可能是广告策略变动或服务器拒绝了请求。")
 
                 final_screenshot = f"{self.screenshot_dir}/final_success_{server_num}.png"
                 sb.save_screenshot(final_screenshot)
