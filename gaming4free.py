@@ -46,7 +46,7 @@ class Game4FreeRenewal:
         time.sleep(random.uniform(min_s, max_s))
 
     def time_to_seconds(self, t_str):
-        """将 HH:MM:SS 格式转换为秒数，容错处理 EXPIRED 等非数字字符"""
+        """将 HH:MM:SS 格式转换为秒数，精准拦截 EXPIRED"""
         if not t_str or "EXPIRED" in t_str.upper() or "未知" in t_str:
             return 0
         try:
@@ -182,51 +182,67 @@ class Game4FreeRenewal:
                     raise Exception(f"未找到打开模态框的按钮: {e}")
 
                 # ========================================================
-                # 💥 破局防线：坐标归零 + 多重物理穿透
+                # 💥 最终奥义：大清洗 + 潜入式打点
                 # ========================================================
                 self.log("⏳ 正在挂机等待 42 秒，确保底层视频广告播放完毕...")
                 time.sleep(42)  
                 
-                self.log("🛡️ 启动 Cloudflare 坐标归零物理破盾程序...")
-                
-                # 核心修复 1：将页面滚动强行拉回顶部！消除一切坐标偏移！
-                sb.execute_script("window.scrollTo(0, 0);")
-                time.sleep(1)
-                
+                self.log("🧹 广告播放完毕，发动『大清洗』！剥除隐形护盾...")
+                try:
+                    sb.execute_script("""
+                        // 1. 删除所有无关 iframe (彻底干掉广告播放器)
+                        var frames = document.querySelectorAll('iframe');
+                        for(var i=0; i<frames.length; i++){
+                            if(!frames[i].src.includes('cloudflare') && !frames[i].src.includes('turnstile')){
+                                frames[i].remove();
+                            }
+                        }
+                        // 2. 将所有高层级透明罩子的"鼠标拦截"功能全部关闭
+                        var allDivs = document.querySelectorAll('div');
+                        for(var i=0; i<allDivs.length; i++){
+                            var z = window.getComputedStyle(allDivs[i]).zIndex;
+                            if(z !== 'auto' && parseInt(z) > 100 && !allDivs[i].innerHTML.includes('cloudflare')) {
+                                allDivs[i].style.pointerEvents = 'none';
+                            }
+                        }
+                    """)
+                    time.sleep(2)
+                except Exception as e:
+                    self.log(f"清理罩子时出现小插曲: {e}")
+
+                self.log("🛡️ 启动 Cloudflare 内核级潜入破盾程序...")
                 cf_iframe_selector = 'iframe[src*="challenges.cloudflare.com"], iframe[src*="turnstile"]'
                 token = ""
                 
                 for attempt in range(3):
-                    self.log(f"⚡ 释放组合物理破盾术 (尝试 {attempt+1}/3)...")
+                    self.log(f"⚡ 释放潜入破盾术 (尝试 {attempt+1}/3)...")
                     
-                    # 招式 1: Selenium 原生 ActionChains 精准定位中心点点击
-                    try:
-                        from selenium.webdriver.common.action_chains import ActionChains
-                        cf_el = sb.find_element(cf_iframe_selector)
-                        ActionChains(sb.driver).move_to_element(cf_el).pause(0.5).click().perform()
-                    except:
-                        pass
-                    time.sleep(1.5)
-                    
-                    # 招式 2: 官方底层穿透 API
-                    try:
-                        sb.uc_click(cf_iframe_selector, timeout=2)
-                    except:
-                        pass
-                    time.sleep(1.5)
-                    
-                    # 招式 3: 官方 GUI 绝对坐标兜底
+                    # 招式 1: 官方外部智能点击
                     try:
                         sb.uc_gui_click_captcha()
                     except:
                         pass
+                    time.sleep(2)
+                    
+                    # 招式 2: 【终极绝杀】切换到 iframe 内部环境，无视外部偏移直接点中心！
+                    try:
+                        self.log("   -> 正在潜入 Iframe 内部...")
+                        sb.switch_to_frame(cf_iframe_selector)
+                        time.sleep(1)
+                        # 点击 iframe 内部的 body (即复选框所在位置)
+                        sb.uc_click('body', reconnect_time=2)
+                        self.log("   -> 内部点击指令已下发！")
+                        sb.switch_to_default_content()
+                    except Exception as e:
+                        self.log(f"   -> 潜入失败: {e}")
+                        sb.switch_to_default_content()
                         
                     time.sleep(4)
                     
                     # 摸底检查
                     token = sb.execute_script("return document.querySelector('[name=\"cf-turnstile-response\"]') ? document.querySelector('[name=\"cf-turnstile-response\"]').value : ''")
                     if token:
-                        self.log("✅ 破盾成功！已拿到 Cloudflare 验证凭证。")
+                        self.log("✅ 破盾成功！已从底层拿到 Cloudflare 验证凭证。")
                         break
                 
                 if not token:
@@ -248,13 +264,9 @@ class Game4FreeRenewal:
                 timestamp_after = self.get_remaining_time(sb)
                 self.log(f"🕒 续期后剩余运行时间: {timestamp_after}")
 
-                # ========================================================
-                # 💥 核心修复 2：彻底堵死假阳性漏洞！
-                # ========================================================
                 sec_before = self.time_to_seconds(timestamp_before)
                 sec_after = self.time_to_seconds(timestamp_after)
                 
-                # 只要时间没有实质性增加超过 60 秒，一律视为失败，绝不假报军情！
                 if sec_after <= sec_before + 60:  
                     raise Exception(f"❌ 严重异常：时间未增加！(前: {timestamp_before}, 后: {timestamp_after})。验证码点击失败或被服务器拦截。")
 
