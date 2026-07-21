@@ -135,10 +135,7 @@ class Game4FreeRenewal:
 
                 self.log("⏳ 等待 15 秒，确保模态框加载...")
                 time.sleep(15)  
-
-                # ========================================================
-                # 💥 降维打击 Closed Shadow-DOM，纯物理坐标盲狙
-                # ========================================================
+                
                 token = ""
                 for attempt in range(4):
                     self.log(f"⚡ 尝试定位并物理破解 Cloudflare (尝试 {attempt+1}/4)...")
@@ -157,13 +154,12 @@ class Game4FreeRenewal:
                     if cf_iframe:
                         size = cf_iframe.size
                         width = size['width']
-                        self.log(f"   -> 🎯 锁定 CF 外壳 iframe! 尺寸: {width}x{size['height']}")
+                        self.log(f"   -> 🎯 锁定 iframe! 尺寸: {width}x{size['height']}")
                         
                         if width > 0:
                             center_x_offset = int(-(width / 2) + 30)
                             
                             try:
-                                # 三连发扫射
                                 for offset in [center_x_offset - 15, center_x_offset, center_x_offset + 15]:
                                     ac = ActionChains(sb.driver)
                                     ac.move_to_element(cf_iframe).move_by_offset(offset, 0).click().perform()
@@ -186,11 +182,11 @@ class Game4FreeRenewal:
                         pass
                         
                     if token:
-                        self.log("✅ 破盾成功！已获取到 Cloudflare 凭证。")
+                        self.log("✅ 成功！已获取到 Cloudflare 凭证。")
                         break
                 
                 if not token:
-                    self.log("⚠️ 4 轮后未确认凭证，强行提交碰运气！")
+                    self.log("⚠️ 未确认凭证！")
                 # ========================================================
 
                 self.human_wait(2, 4)
@@ -201,7 +197,7 @@ class Game4FreeRenewal:
                     sb.uc_click('#vm-submit') 
                     self.human_wait(8, 12)
                 except Exception as e:
-                    raise Exception("未能点击最终的确认提交按钮，可能是按钮未激活。")
+                    raise Exception("未能点击最终的确认提交按钮")
 
                 time.sleep(10)
                 
