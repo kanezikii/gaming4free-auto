@@ -47,7 +47,6 @@ class Game4FreeRenewal:
         time.sleep(random.uniform(min_s, max_s))
 
     def time_to_seconds(self, t_str):
-        """将 HH:MM:SS 格式转换为秒数，精准拦截 EXPIRED 等非数字状态"""
         if not t_str or "EXPIRED" in t_str.upper() or "未知" in t_str:
             return 0
         try:
@@ -96,19 +95,22 @@ class Game4FreeRenewal:
         self.log("=" * 40)
         self.log(f"🚀 开始续期 [{region}] ({server_num})")
         
-        USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+        # ⚠️ 关键修复 1：移除了硬编码的 User-Agent
+        # 让 uc 模式自动匹配真实的浏览器内核指纹，防止被 Cloudflare 秒杀
+        CHROMIUM_ARGS = "--no-sandbox,--disable-dev-shm-usage,--disable-gpu,--window-position=0,0,--window-size=1280,720,--disable-blink-features=AutomationControlled,--disable-infobars,--disable-popup-blocking"
 
         with SB(
             uc=True,
             test=True,
             headed=True,
             headless=False,
-            xvfb=False, # YML 中已经使用 xvfb-run，所以代码里这里设为 False
-            chromium_arg=f"--no-sandbox,--disable-dev-shm-usage,--disable-gpu,--window-position=0,0,--window-size=1280,720,--disable-blink-features=AutomationControlled,--disable-infobars,--disable-popup-blocking,--user-agent={USER_AGENT}",
+            xvfb=False,  # GitHub Actions 中已经使用 xvfb-run
+            chromium_arg=CHROMIUM_ARGS,
             proxy=PROXY_URL if PROXY_URL else None
         ) as sb:
             try:
                 self.log("✅ 浏览器已启动！")
+                sb.driver.maximize_window() # 确保在虚拟桌面中完全展开
 
                 try:
                     sb.open("https://api.ipify.org?format=json")
@@ -140,7 +142,7 @@ class Game4FreeRenewal:
                 sb.execute_script("window.scrollBy(0,600);")
                 self.human_wait(2, 4)
                 
-                # 点击打开模态框
+                # 打开验证模态框
                 try:
                     self.log("🖱️ 正在点击 'VOTE + ADD 90 MIN'...")
                     sb.wait_for_element_visible("#sd-vote-btn", timeout=10)
@@ -148,13 +150,10 @@ class Game4FreeRenewal:
                 except Exception as e:
                     raise Exception(f"未找到打开模态框的按钮: {e}")
 
-                # ========================================================
-                # 💥 优化后的 CF 验证码破解逻辑
-                # ========================================================
                 self.log("⏳ 等待 15 秒，确保模态框加载及底层视频广告播放...")
                 time.sleep(15)  
                 
-                # 安全清理可能遮挡验证码的悬浮广告，但不破坏 DOM 的指针事件
+                # 清理遮挡广告（保留 DOM 结构完整性）
                 try:
                     sb.execute_script("""
                         document.querySelectorAll('ins, .ad-container, iframe[src*="google"]').forEach(e => e.remove());
@@ -162,38 +161,75 @@ class Game4FreeRenewal:
                 except: pass
                 time.sleep(2)
 
+                # ========================================================
+                # 💥 关键修复 2：Shadow DOM 递归穿透 + 三重扫射点击
+                # ========================================================
                 token = ""
-                for attempt in range(3):
-                    self.log(f"⚡ 尝试定位并点击 Cloudflare 验证码 (尝试 {attempt+1}/3)...")
+                for attempt in range(4):
+                    self.log(f"⚡ 尝试定位并破解 Cloudflare (尝试 {attempt+1}/4)...")
                     
-                    # 方案 1: 使用 SeleniumBase 原生专用的 CF 点击器
-                    try:
-                        sb.uc_gui_click_captcha()
-                        time.sleep(3)
-                    except:
-                        pass
+                    # 强力 JS 脚本：遍历全 DOM (包含所有影子节点) 寻找 Turnstile
+                    rect = sb.execute_script("""
+                        let result = null;
+                        function searchDOM(node) {
+                            if (result) return;
+                            if (node.tagName === 'IFRAME' && (node.src.includes('cloudflare') || node.src.includes('turnstile'))) {
+                                result = node;
+                                return;
+                            }
+                            if (node.shadowRoot) searchDOM(node.shadowRoot);
+                            for (let child of node.children) searchDOM(child);
+                        }
+                        searchDOM(document.body);
+                        
+                        if (result) {
+                            result.id = 'cf-target-iframe-unique';
+                            // 强制滚动到视图中央
+                            result.scrollIntoView({block: 'center', inline: 'center'});
+                            let r = result.getBoundingClientRect();
+                            return {x: r.left, y: r.top, width: r.width, height: r.height};
+                        }
+                        return null;
+                    """)
                     
-                    # 方案 2: 直接寻找 iframe 进行原生 uc_click
-                    try:
-                        cf_selector = 'iframe[src*="cloudflare"], iframe[src*="turnstile"]'
-                        if sb.is_element_present(cf_selector):
-                            sb.uc_click(cf_selector)
-                            time.sleep(3)
-                    except:
-                        pass
+                    if rect and rect['width'] > 0:
+                        self.log(f"   -> 🎯 成功穿透 DOM 锁定 CF iframe! 尺寸: {rect['width']}x{rect['height']}")
+                        
+                        try:
+                            # 策略 A: SeleniumBase 的抗指纹原生点击
+                            sb.uc_click('#cf-target-iframe-unique')
+                            time.sleep(1)
+                            
+                            # 策略 B: ActionChains 物理坐标扫射 (精准打击打勾框)
+                            cf_el = sb.driver.find_element("css selector", "#cf-target-iframe-unique")
+                            # 计算复选框相对于元素中心的 X 轴偏移量（偏左约一半宽度，再往右收 30 像素）
+                            center_x_offset = int(-(rect['width'] / 2) + 30)
+                            
+                            # 依次执行三次细微水平偏移的点击，确保必定打中
+                            for offset in [center_x_offset - 15, center_x_offset, center_x_offset + 15]:
+                                ac = ActionChains(sb.driver)
+                                ac.move_to_element(cf_el).move_by_offset(offset, 0).click().perform()
+                                time.sleep(0.5)
+                                
+                        except Exception as e:
+                            self.log(f"   -> 🖱️ 坐标扫射执行异常 (可忽略): {e}")
+                    else:
+                        self.log("   -> ⚠️ 未能找到明确的 CF iframe，尝试备用 GUI 兜底盲点...")
+                        try: sb.uc_gui_click_captcha()
+                        except: pass
                     
-                    # 摸底检查：获取 CF 注入到表单里的隐藏 token
+                    self.log("   -> ⏳ 等待 Cloudflare 验证回调 (6 秒)...")
+                    time.sleep(6)
+                    
+                    # 摸底检查：获取 CF 注入到隐藏表单里的凭证 Token
                     token = sb.execute_script("return document.querySelector('[name=\"cf-turnstile-response\"]') ? document.querySelector('[name=\"cf-turnstile-response\"]').value : ''")
                     
                     if token:
                         self.log("✅ 破盾成功！已获取到 Cloudflare 凭证。")
                         break
-                    else:
-                        self.log("⚠️ 暂未获取到凭证，等待并重试...")
-                        time.sleep(5)
                 
                 if not token:
-                    self.log("⚠️ 3 轮尝试后未获取到显式凭证，可能已静默通过，强行提交碰运气！")
+                    self.log("⚠️ 4 轮尝试后未获取到显式凭证，可能已静默通过或 IP 被高亮审查，强行提交碰运气！")
                 # ========================================================
 
                 self.human_wait(2, 4)
@@ -201,11 +237,10 @@ class Game4FreeRenewal:
                 try:
                     self.log("🖱️ 正在点击最终提交按钮 'VOTE — ADDS 90 MINUTES'...")
                     sb.wait_for_element_visible("#vm-submit", timeout=15)
-                    # 换用 uc_click 增加穿透力
                     sb.uc_click('#vm-submit') 
                     self.human_wait(8, 12)
                 except Exception as e:
-                    raise Exception("未能点击最终的确认提交按钮，可能是按钮被遮挡或未激活。")
+                    raise Exception("未能点击最终的确认提交按钮，可能是按钮未激活。")
 
                 time.sleep(10)
                 
@@ -215,6 +250,7 @@ class Game4FreeRenewal:
                 sec_before = self.time_to_seconds(timestamp_before)
                 sec_after = self.time_to_seconds(timestamp_after)
                 
+                # 依然保持严格防假报逻辑
                 if sec_after <= sec_before + 60:  
                     raise Exception(f"❌ 严重异常：时间未增加！(前: {timestamp_before}, 后: {timestamp_after})。验证码点击被拦截或未生效。")
 
