@@ -46,7 +46,9 @@ class Game4FreeRenewal:
         time.sleep(random.uniform(min_s, max_s))
 
     def time_to_seconds(self, t_str):
-        """将 HH:MM:SS 格式转换为秒数"""
+        """将 HH:MM:SS 格式转换为秒数，容错处理 EXPIRED 等非数字字符"""
+        if not t_str or "EXPIRED" in t_str.upper() or "未知" in t_str:
+            return 0
         try:
             h, m, s = map(int, t_str.strip().split(':'))
             return h * 3600 + m * 60 + s
@@ -180,60 +182,55 @@ class Game4FreeRenewal:
                     raise Exception(f"未找到打开模态框的按钮: {e}")
 
                 # ========================================================
-                # 💥 最终防线：键盘焦点转移法 (Tab + Space)
+                # 💥 破局防线：坐标归零 + 多重物理穿透
                 # ========================================================
                 self.log("⏳ 正在挂机等待 42 秒，确保底层视频广告播放完毕...")
                 time.sleep(42)  
                 
-                try:
-                    sb.execute_script("document.querySelector('#vm-submit').scrollIntoView({block: 'center'});")
-                    time.sleep(1)
-                except:
-                    pass
-
-                self.log("🛡️ 启动 Cloudflare 键盘物理破盾程序 (无视坐标错位)...")
+                self.log("🛡️ 启动 Cloudflare 坐标归零物理破盾程序...")
                 
-                import pyautogui
+                # 核心修复 1：将页面滚动强行拉回顶部！消除一切坐标偏移！
+                sb.execute_script("window.scrollTo(0, 0);")
+                time.sleep(1)
+                
+                cf_iframe_selector = 'iframe[src*="challenges.cloudflare.com"], iframe[src*="turnstile"]'
                 token = ""
                 
                 for attempt in range(3):
-                    self.log(f"⚡ 释放 Tab+Space 组合拳 (尝试 {attempt+1}/3)...")
+                    self.log(f"⚡ 释放组合物理破盾术 (尝试 {attempt+1}/3)...")
                     
+                    # 招式 1: Selenium 原生 ActionChains 精准定位中心点点击
                     try:
-                        # 1. 点击模态框里的用户名输入框，获取初始焦点
-                        self.log("   -> 定位用户名输入框焦点...")
-                        sb.click('input[type="text"]', timeout=3)
-                        time.sleep(1.5)
-                        
-                        # 2. 按下 Tab 键，系统焦点会自动跳到下一个元素（即 CF 验证框）
-                        self.log("   -> 按下 Tab 键转移焦点...")
-                        pyautogui.press('tab')
-                        time.sleep(1)
-                        
-                        # 3. 按下空格键，物理触发勾选！
-                        self.log("   -> 按下 Space 空格键触发点击！")
-                        pyautogui.press('space')
-                    except Exception as e:
-                        self.log(f"⚠️ 键盘模拟出现小意外: {e}")
-                        
-                    time.sleep(5)
+                        from selenium.webdriver.common.action_chains import ActionChains
+                        cf_el = sb.find_element(cf_iframe_selector)
+                        ActionChains(sb.driver).move_to_element(cf_el).pause(0.5).click().perform()
+                    except:
+                        pass
+                    time.sleep(1.5)
                     
-                    # 摸底检查：看看令牌拿到没有
+                    # 招式 2: 官方底层穿透 API
+                    try:
+                        sb.uc_click(cf_iframe_selector, timeout=2)
+                    except:
+                        pass
+                    time.sleep(1.5)
+                    
+                    # 招式 3: 官方 GUI 绝对坐标兜底
+                    try:
+                        sb.uc_gui_click_captcha()
+                    except:
+                        pass
+                        
+                    time.sleep(4)
+                    
+                    # 摸底检查
                     token = sb.execute_script("return document.querySelector('[name=\"cf-turnstile-response\"]') ? document.querySelector('[name=\"cf-turnstile-response\"]').value : ''")
-                    
                     if token:
-                        self.log("✅ 破盾成功！键盘组合拳已成功获取验证凭证。")
+                        self.log("✅ 破盾成功！已拿到 Cloudflare 验证凭证。")
                         break
-                    else:
-                        # 备用方案：如果键盘失败，再尝试一次官方的 GUI 坐标点击兜底
-                        try:
-                            self.log("   -> 尝试备用坐标点击...")
-                            sb.uc_gui_click('iframe[src*="challenges.cloudflare.com"], iframe[src*="turnstile"]')
-                        except:
-                            pass
                 
                 if not token:
-                    self.log("⚠️ 尝试 3 次后仍未在表单发现显式凭证，可能已免检，直接强行提交！")
+                    self.log("⚠️ 尝试 3 次后仍未在显式层发现凭证，强行提交碰运气！")
                 # ========================================================
 
                 self.human_wait(2, 4)
@@ -251,17 +248,20 @@ class Game4FreeRenewal:
                 timestamp_after = self.get_remaining_time(sb)
                 self.log(f"🕒 续期后剩余运行时间: {timestamp_after}")
 
+                # ========================================================
+                # 💥 核心修复 2：彻底堵死假阳性漏洞！
+                # ========================================================
                 sec_before = self.time_to_seconds(timestamp_before)
                 sec_after = self.time_to_seconds(timestamp_after)
                 
-                if sec_after > 0 and sec_before > 0:
-                    if sec_after <= sec_before + 120:  
-                        raise Exception("❌ 严重异常：时间未增加！由于未成功点击人机验证或广告未放完被服务器拦截。")
+                # 只要时间没有实质性增加超过 60 秒，一律视为失败，绝不假报军情！
+                if sec_after <= sec_before + 60:  
+                    raise Exception(f"❌ 严重异常：时间未增加！(前: {timestamp_before}, 后: {timestamp_after})。验证码点击失败或被服务器拦截。")
 
                 final_screenshot = f"{self.screenshot_dir}/final_success_{server_num}.png"
                 sb.save_screenshot(final_screenshot)
 
-                msg = f"✅ [{region}] 续期成功\n🖥️ 编号: {server_num}\n🕒 续期前剩余时间: {timestamp_before}\n🎉 续期后剩余时间: {timestamp_after}"
+                msg = f"✅ [{region}] 续期成功\n🖥️ 编号: {server_num}\n🕒 续期前时间: {timestamp_before}\n🎉 续期后时间: {timestamp_after}"
                 self.send_telegram_notify(msg, final_screenshot)
 
             except Exception as e:
