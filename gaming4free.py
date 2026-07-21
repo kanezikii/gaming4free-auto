@@ -14,6 +14,7 @@ if "XAUTHORITY" not in os.environ:
         os.environ["XAUTHORITY"] = "/home/headless/.Xauthority"
 
 from seleniumbase import SB
+from selenium.webdriver.common.action_chains import ActionChains
 
 # ================= 配置区域 =================
 PROXY_URL = os.getenv("PROXY", "")  
@@ -46,7 +47,7 @@ class Game4FreeRenewal:
         time.sleep(random.uniform(min_s, max_s))
 
     def time_to_seconds(self, t_str):
-        """将 HH:MM:SS 格式转换为秒数，容错处理 EXPIRED"""
+        """将 HH:MM:SS 格式转换为秒数，精准拦截 EXPIRED 等非数字状态"""
         if not t_str or "EXPIRED" in t_str.upper() or "未知" in t_str:
             return 0
         try:
@@ -56,7 +57,7 @@ class Game4FreeRenewal:
             return 0
 
     def move_mouse_human_advanced(self, sb):
-        """生成更复杂的随机鼠标移动轨迹"""
+        """生成随机鼠标移动轨迹"""
         try:
             time.sleep(random.uniform(0.1, 0.4))
             width = sb.execute_script("return window.innerWidth;")
@@ -95,7 +96,7 @@ class Game4FreeRenewal:
             sb.wait_for_element_visible('#sd-timer', timeout=15)
             time.sleep(1)
             remaining_text = sb.get_text('#sd-timer').strip()
-        except Exception as e:
+        except Exception:
             try:
                 remaining_text = sb.execute_script("""
                     var el = document.querySelector('#sd-timer');
@@ -182,37 +183,65 @@ class Game4FreeRenewal:
                     raise Exception(f"未找到打开模态框的按钮: {e}")
 
                 # ========================================================
-                # 💥 最终奥义：坐标归零 + 多维破盾
+                # 💥 究极奥义：精准左偏置“扫射”破盾法
                 # ========================================================
                 self.log("⏳ 正在挂机等待 42 秒，确保底层视频广告播放完毕...")
                 time.sleep(42)  
                 
-                self.log("🛡️ 启动 Cloudflare 坐标归零物理破盾程序...")
-                
-                # 核心修复 1：将页面滚动拉回顶部！消除绝对坐标偏移差！
-                sb.execute_script("window.scrollTo(0, 0);")
-                time.sleep(1)
+                self.log("🛡️ 启动 Cloudflare 地毯式横向扫射程序...")
                 
                 try:
-                    # 💥 精准打击 1：SeleniumActionChains 原生物理点击中心！
-                    from selenium.webdriver.common.action_chains import ActionChains
-                    cf_el = sb.find_element('iframe[src*="cloudflare"], iframe[src*="turnstile"]')
-                    # 移动到元素中心，按下鼠标点击，容错处理Shadow DOM问题
-                    ActionChains(sb.driver).move_to_element(cf_el).pause(0.5).click().perform()
-                    time.sleep(2)
+                    sb.execute_script("document.querySelector('#vm-submit').scrollIntoView({block: 'center'});")
+                    time.sleep(1)
+                    sb.execute_script("window.scrollTo(0, 0);")
                 except: pass
 
-                # 招式 2: 官方 GUI 坐标点击兜底
-                try: sb.uc_gui_click_captcha()
-                except: pass
+                # 只锁定在屏幕上真实可见、长宽大于 0 的 CF 框架
+                target_cf = None
+                try:
+                    cf_iframes = sb.find_elements('iframe[src*="challenges.cloudflare.com"], iframe[src*="turnstile"]')
+                    for f in cf_iframes:
+                        if f.size['width'] > 0 and f.is_displayed():
+                            target_cf = f
+                            break
+                except Exception as e:
+                    self.log(f"查找可见 iframe 异常: {e}")
+
+                token = ""
                 
-                time.sleep(4)
+                if target_cf:
+                    self.log("🎯 已锁定真实验证框，装载弹药，开始对左侧复选框区域执行多点扫射...")
+                    for attempt in range(3):
+                        
+                        # 核心改动：绝不点中心！移动到中心后，向左平移 120 像素到 40 像素的区域连开五枪！
+                        offsets = [-120, -100, -80, -60, -40]
+                        for x_off in offsets:
+                            try:
+                                ActionChains(sb.driver).move_to_element(target_cf).move_by_offset(x_off, 0).click().perform()
+                                time.sleep(0.4)
+                            except:
+                                pass
+                        
+                        time.sleep(4)
+                        
+                        # 检查击杀确认（令牌是否到手）
+                        token = sb.execute_script("return document.querySelector('[name=\"cf-turnstile-response\"]') ? document.querySelector('[name=\"cf-turnstile-response\"]').value : ''")
+                        if token:
+                            self.log("✅ 破盾成功！已精准命中复选框并取得加密凭证！")
+                            break
+                        else:
+                            self.log(f"⚠️ 第 {attempt+1} 轮扫射未见效，尝试调用原生备用方案...")
+                            try: sb.uc_gui_click_captcha()
+                            except: pass
+                            time.sleep(3)
+                else:
+                    self.log("⚠️ 未在页面上找到可见的 CF 框架，极可能当前节点被直接免检放行！")
                 # ========================================================
 
                 self.human_wait(2, 4)
 
                 try:
-                    self.log("🖱️ 正在点击最终提交按钮 'VOTE — ADDS 90 MINUTES'...")
+                    self.log("🖱️ 验证流程结束！正在点击最终提交按钮 'VOTE — ADDS 90 MINUTES'...")
                     sb.wait_for_element_clickable("#vm-submit", timeout=15)
                     sb.click('#vm-submit')
                     self.human_wait(8, 12)
@@ -224,15 +253,12 @@ class Game4FreeRenewal:
                 timestamp_after = self.get_remaining_time(sb)
                 self.log(f"🕒 续期后剩余运行时间: {timestamp_after}")
 
-                # ========================================================
-                # 💥 最终奥义：除恶务尽！彻底拦截假阳性！
-                # ========================================================
+                # 严苛校验网：绝不谎报军情，只有时间实质性增加才算赢
                 sec_before = self.time_to_seconds(timestamp_before)
                 sec_after = self.time_to_seconds(timestamp_after)
                 
-                # 容错 60 秒（网络加载延迟），只要时间没实质性增加，一律视为失败！
                 if sec_after <= sec_before + 60:  
-                    raise Exception(f"❌ 严重异常：时间未增加！(前: {timestamp_before}, 后: {timestamp_after})。请检查人机验证是否点击挥空。")
+                    raise Exception(f"❌ 严重异常：时间未增加！(前: {timestamp_before}, 后: {timestamp_after})。扫射击空，或令牌被服务器拒绝。")
 
                 final_screenshot = f"{self.screenshot_dir}/final_success_{server_num}.png"
                 sb.save_screenshot(final_screenshot)
