@@ -75,7 +75,6 @@ class Game4FreeRenewal:
         self.log("=" * 40)
         self.log(f"🚀 开始续期 [{region}] ({server_num})")
         
-        # 规避 Chrome 130+ Bug 的参数
         CHROMIUM_ARGS = "--no-sandbox,--disable-dev-shm-usage,--disable-gpu,--window-position=0,0,--window-size=1280,720,--disable-blink-features=AutomationControlled,--disable-infobars,--disable-popup-blocking,--disable-features=OptimizationGuideModelDownloading,OptimizationHintsFetching,OptimizationTargetPrediction"
 
         with SB(
@@ -89,9 +88,8 @@ class Game4FreeRenewal:
         ) as sb:
             try:
                 self.log("✅ 浏览器已启动！")
-                sb.driver.maximize_window()
+                # 🚫 已移除 sb.driver.maximize_window() 避免 Xvfb 协议崩溃
 
-                # 💡 修复1：抛弃在浏览器里跑 JS 查 IP，改用原生 requests 防崩溃
                 try:
                     proxies = {"http": PROXY_URL, "https": PROXY_URL} if PROXY_URL else None
                     ip_val = requests.get("https://api.ipify.org?format=json", proxies=proxies, timeout=10).json().get('ip', 'Unknown')
@@ -125,7 +123,6 @@ class Game4FreeRenewal:
                     pass
                 self.log(f"🕒 续期前剩余运行时间: {timestamp_before}")
 
-                # 纯鼠标滚动，减少 JS Runtime 依赖
                 ActionChains(sb.driver).scroll_by_amount(0, 600).perform()
                 self.human_wait(2, 4)
                 
@@ -140,7 +137,7 @@ class Game4FreeRenewal:
                 time.sleep(15)  
 
                 # ========================================================
-                # 💥 修复2：降维打击 Closed Shadow-DOM，纯物理坐标盲狙
+                # 💥 降维打击 Closed Shadow-DOM，纯物理坐标盲狙
                 # ========================================================
                 token = ""
                 for attempt in range(4):
@@ -148,7 +145,6 @@ class Game4FreeRenewal:
                     
                     cf_iframe = None
                     try:
-                        # 用纯粹的 Selenium 查找，绝不使用 JS (避免 Runtime.evaluate 崩溃)
                         iframes = sb.driver.find_elements("tag name", "iframe")
                         for f in iframes:
                             src = f.get_attribute("src")
@@ -164,7 +160,6 @@ class Game4FreeRenewal:
                         self.log(f"   -> 🎯 锁定 CF 外壳 iframe! 尺寸: {width}x{size['height']}")
                         
                         if width > 0:
-                            # 盲狙核心算法：无论里面 shadow-root 怎么锁，我们在盒子左偏中的物理像素点强制下钻点击
                             center_x_offset = int(-(width / 2) + 30)
                             
                             try:
@@ -186,7 +181,6 @@ class Game4FreeRenewal:
                     time.sleep(6)
                     
                     try:
-                        # 仅在最后一步才尝试用 JS 获取一次 token
                         token = sb.execute_script("return document.querySelector('[name=\"cf-turnstile-response\"]') ? document.querySelector('[name=\"cf-turnstile-response\"]').value : ''")
                     except:
                         pass
