@@ -21,11 +21,17 @@ jobs:
       with:
         python-version: '3.10'
 
+    - name: Install System Dependencies for PyAutoGUI/Xvfb
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y python3-tk python3-dev xvfb x11-utils scrot
+
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install seleniumbase requests
-        
+        # 强制安装最新版本的 seleniumbase，以获取最新的反 CF 补丁
+        pip install --upgrade seleniumbase requests pyautogui
+
     - name: Setup Chrome
       run: |
         seleniumbase install chromedriver
@@ -34,26 +40,21 @@ jobs:
       env:
         XRAY_CONFIG: ${{ secrets.XRAY_CONFIG }} 
       run: |
-        # 下载并解压 Xray-core
         wget -q https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip
         unzip -q Xray-linux-64.zip -d xray
         chmod +x xray/xray
         
-        # 使用 printenv 完美写入配置，避免任何字符转义和空格导致的崩溃
         printenv XRAY_CONFIG > xray/config.json
         
-        # 后台启动 Xray
         nohup ./xray/xray run -c xray/config.json > xray.log 2>&1 &
         sleep 5
         
-        # 检查 Xray 进程是否存活
         if ! pgrep -x "xray" > /dev/null; then
             echo "❌ Xray 进程未启动或已崩溃！查看报错日志："
             cat xray.log
             exit 1
         fi
         
-        # 测试节点连通性
         curl -il -x socks5://127.0.0.1:10808 https://api.ipify.org || (echo "❌ 代理测试失败，查看 Xray 日志:" && cat xray.log && exit 1)
 
     - name: Run Script
@@ -63,5 +64,5 @@ jobs:
         TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}  
         SERVERS: ${{ secrets.SERVERS }}  
       run: |
-        # 使用 xvfb 运行以支持强力过人机验证模式
-        xvfb-run -a python gaming4free.py
+        # 增加 xvfb 视窗分辨率以确保验证码位于视野内
+        xvfb-run --server-args="-screen 0 1280x720x24" -a python gaming4free.py
