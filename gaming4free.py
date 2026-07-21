@@ -47,7 +47,7 @@ class Game4FreeRenewal:
         time.sleep(random.uniform(min_s, max_s))
 
     def time_to_seconds(self, t_str):
-        """将 HH:MM:SS 格式转换为秒数，精准拦截 EXPIRED 等非数字状态"""
+        """将 HH:MM:SS 格式转换为秒数，精准拦截 EXPIRED"""
         if not t_str or "EXPIRED" in t_str.upper() or "未知" in t_str:
             return 0
         try:
@@ -183,59 +183,58 @@ class Game4FreeRenewal:
                     raise Exception(f"未找到打开模态框的按钮: {e}")
 
                 # ========================================================
-                # 💥 究极奥义：精准左偏置“扫射”破盾法
+                # 💥 究极奥义：锚点定位 + 网格盲狙轰炸
                 # ========================================================
                 self.log("⏳ 正在挂机等待 42 秒，确保底层视频广告播放完毕...")
                 time.sleep(42)  
                 
-                self.log("🛡️ 启动 Cloudflare 地毯式横向扫射程序...")
+                self.log("🛡️ 发现 Shadow DOM (闭合影子节点)！启动【锚点定位打击】...")
                 
-                try:
-                    sb.execute_script("document.querySelector('#vm-submit').scrollIntoView({block: 'center'});")
-                    time.sleep(1)
-                    sb.execute_script("window.scrollTo(0, 0);")
+                # 清除遮挡坐标的滚动偏移，并将广告弹窗尽量清理
+                sb.execute_script("window.scrollTo(0, 0);")
+                try: sb.execute_script("document.querySelectorAll('ins, iframe[src*=\"google\"]').forEach(e => e.remove());")
                 except: pass
-
-                # 只锁定在屏幕上真实可见、长宽大于 0 的 CF 框架
-                target_cf = None
-                try:
-                    cf_iframes = sb.find_elements('iframe[src*="challenges.cloudflare.com"], iframe[src*="turnstile"]')
-                    for f in cf_iframes:
-                        if f.size['width'] > 0 and f.is_displayed():
-                            target_cf = f
-                            break
-                except Exception as e:
-                    self.log(f"查找可见 iframe 异常: {e}")
+                time.sleep(1)
 
                 token = ""
+                for attempt in range(3):
+                    self.log(f"⚡ 装载弹药，释放网格盲狙轰炸 (尝试 {attempt+1}/3)...")
+                    
+                    try:
+                        # 1. 找到完全处于可见 DOM 中的锚点：最终的 VOTE 按钮
+                        submit_btn = sb.find_element('#vm-submit')
+                        
+                        # 2. 将 VOTE 按钮强行滚动到屏幕的绝对中间，确保上方区域不被遮挡
+                        sb.execute_script("arguments[0].scrollIntoView({block: 'center'});", submit_btn)
+                        time.sleep(1)
+
+                        # 3. 以 VOTE 按钮中心为(0,0)，向左(-100到-150)，向上(-55到-85) 进行 3x3 地毯式轰炸
+                        y_offsets = [-55, -70, -85]   # 向上方平移
+                        x_offsets = [-100, -125, -150] # 向左侧平移
+
+                        for y in y_offsets:
+                            for x in x_offsets:
+                                ActionChains(sb.driver).move_to_element(submit_btn).move_by_offset(x, y).click().perform()
+                                time.sleep(0.2)
+                                
+                    except Exception as e:
+                        self.log(f"   -> 锚点定位出现偏差: {e}")
+                    
+                    time.sleep(4)
+                    
+                    # 摸底检查：唯一在 Light DOM 里暴露的隐蔽表单值
+                    token = sb.execute_script("return document.querySelector('[name=\"cf-turnstile-response\"]') ? document.querySelector('[name=\"cf-turnstile-response\"]').value : ''")
+                    if token:
+                        self.log("✅ 破盾成功！盲狙精准命中闭源框架内的打勾框！")
+                        break
+                    else:
+                        self.log("⚠️ 扫射未确认击杀，尝试 GUI 备用兜底点击...")
+                        try: sb.uc_gui_click_captcha()
+                        except: pass
+                        time.sleep(3)
                 
-                if target_cf:
-                    self.log("🎯 已锁定真实验证框，装载弹药，开始对左侧复选框区域执行多点扫射...")
-                    for attempt in range(3):
-                        
-                        # 核心改动：绝不点中心！移动到中心后，向左平移 120 像素到 40 像素的区域连开五枪！
-                        offsets = [-120, -100, -80, -60, -40]
-                        for x_off in offsets:
-                            try:
-                                ActionChains(sb.driver).move_to_element(target_cf).move_by_offset(x_off, 0).click().perform()
-                                time.sleep(0.4)
-                            except:
-                                pass
-                        
-                        time.sleep(4)
-                        
-                        # 检查击杀确认（令牌是否到手）
-                        token = sb.execute_script("return document.querySelector('[name=\"cf-turnstile-response\"]') ? document.querySelector('[name=\"cf-turnstile-response\"]').value : ''")
-                        if token:
-                            self.log("✅ 破盾成功！已精准命中复选框并取得加密凭证！")
-                            break
-                        else:
-                            self.log(f"⚠️ 第 {attempt+1} 轮扫射未见效，尝试调用原生备用方案...")
-                            try: sb.uc_gui_click_captcha()
-                            except: pass
-                            time.sleep(3)
-                else:
-                    self.log("⚠️ 未在页面上找到可见的 CF 框架，极可能当前节点被直接免检放行！")
+                if not token:
+                    self.log("⚠️ 3 轮轰炸后未在表单发现显式凭证，强行提交碰运气！")
                 # ========================================================
 
                 self.human_wait(2, 4)
@@ -253,12 +252,11 @@ class Game4FreeRenewal:
                 timestamp_after = self.get_remaining_time(sb)
                 self.log(f"🕒 续期后剩余运行时间: {timestamp_after}")
 
-                # 严苛校验网：绝不谎报军情，只有时间实质性增加才算赢
                 sec_before = self.time_to_seconds(timestamp_before)
                 sec_after = self.time_to_seconds(timestamp_after)
                 
                 if sec_after <= sec_before + 60:  
-                    raise Exception(f"❌ 严重异常：时间未增加！(前: {timestamp_before}, 后: {timestamp_after})。扫射击空，或令牌被服务器拒绝。")
+                    raise Exception(f"❌ 严重异常：时间未增加！(前: {timestamp_before}, 后: {timestamp_after})。验证码点击被拦截或未生效。")
 
                 final_screenshot = f"{self.screenshot_dir}/final_success_{server_num}.png"
                 sb.save_screenshot(final_screenshot)
