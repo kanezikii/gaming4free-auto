@@ -29,8 +29,8 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        # 强制安装最新版本的 seleniumbase，以获取最新的反 CF 补丁
-        pip install --upgrade seleniumbase requests pyautogui
+        # 增加 --no-cache-dir 强制拉取最新包，彻底解决 Chrome 130+ 协议断连 Bug
+        pip install --upgrade --no-cache-dir seleniumbase undetected-chromedriver requests pyautogui
 
     - name: Setup Chrome
       run: |
