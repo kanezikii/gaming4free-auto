@@ -183,16 +183,30 @@ class Game4FreeRenewal:
                     raise Exception(f"未找到打开模态框的按钮: {e}")
 
                 # ========================================================
-                # 💥 究极奥义：锚点定位 + 网格盲狙轰炸
+                # 💥 究极奥义：锚点定位 + 密集网格盲狙轰炸
                 # ========================================================
                 self.log("⏳ 正在挂机等待 42 秒，确保底层视频广告播放完毕...")
                 time.sleep(42)  
                 
                 self.log("🛡️ 发现 Shadow DOM (闭合影子节点)！启动【锚点定位打击】...")
                 
-                # 清除遮挡坐标的滚动偏移，并将广告弹窗尽量清理
-                sb.execute_script("window.scrollTo(0, 0);")
-                try: sb.execute_script("document.querySelectorAll('ins, iframe[src*=\"google\"]').forEach(e => e.remove());")
+                # 清除可能遮挡的悬浮广告
+                try: sb.execute_script("document.querySelectorAll('ins, iframe[src*=\"google\"], .ad-container').forEach(e => e.remove());")
+                except: pass
+                
+                # 将所有高层级透明罩子无效化，防止它们吸收物理点击
+                try:
+                    sb.execute_script("""
+                        document.querySelectorAll('div').forEach(d => {
+                            let z = window.getComputedStyle(d).zIndex;
+                            if(z !== 'auto' && parseInt(z) > 100) {
+                                let html = d.innerHTML.toLowerCase();
+                                if(!html.includes('cloudflare') && !html.includes('turnstile') && !html.includes('vote')) {
+                                    d.style.pointerEvents = 'none';
+                                }
+                            }
+                        });
+                    """)
                 except: pass
                 time.sleep(1)
 
@@ -201,34 +215,34 @@ class Game4FreeRenewal:
                     self.log(f"⚡ 装载弹药，释放网格盲狙轰炸 (尝试 {attempt+1}/3)...")
                     
                     try:
-                        # 1. 找到完全处于可见 DOM 中的锚点：最终的 VOTE 按钮
-                        submit_btn = sb.find_element('#vm-submit')
+                        # 1. 将 VOTE 按钮强行滚动到屏幕的绝对中间 (彻底修复 arguments 报错)
+                        sb.execute_script("document.querySelector('#vm-submit').scrollIntoView({block: 'center'});")
+                        time.sleep(1.5)
                         
-                        # 2. 将 VOTE 按钮强行滚动到屏幕的绝对中间，确保上方区域不被遮挡
-                        sb.execute_script("arguments[0].scrollIntoView({block: 'center'});", submit_btn)
-                        time.sleep(1)
+                        # 2. 找到完全处于可见 DOM 中的锚点：最终的 VOTE 按钮
+                        submit_btn = sb.find_element('#vm-submit')
 
-                        # 3. 以 VOTE 按钮中心为(0,0)，向左(-100到-150)，向上(-55到-85) 进行 3x3 地毯式轰炸
-                        y_offsets = [-55, -70, -85]   # 向上方平移
-                        x_offsets = [-100, -125, -150] # 向左侧平移
+                        # 3. 以 VOTE 按钮中心为(0,0)，向左上方发起 4x4 密集扫射
+                        y_offsets = [-50, -65, -80, -95]    # 向上平移 (Y轴上移)
+                        x_offsets = [-90, -115, -140, -165] # 向左平移 (X轴左移)
 
                         for y in y_offsets:
                             for x in x_offsets:
                                 ActionChains(sb.driver).move_to_element(submit_btn).move_by_offset(x, y).click().perform()
-                                time.sleep(0.2)
+                                time.sleep(0.1)
                                 
                     except Exception as e:
-                        self.log(f"   -> 锚点定位出现偏差: {e}")
+                        self.log(f"   -> 锚点定位或轰炸出现异常: {e}")
                     
                     time.sleep(4)
                     
-                    # 摸底检查：唯一在 Light DOM 里暴露的隐蔽表单值
+                    # 摸底检查：读取隐藏在 Light DOM 里的加密表单数据
                     token = sb.execute_script("return document.querySelector('[name=\"cf-turnstile-response\"]') ? document.querySelector('[name=\"cf-turnstile-response\"]').value : ''")
                     if token:
                         self.log("✅ 破盾成功！盲狙精准命中闭源框架内的打勾框！")
                         break
                     else:
-                        self.log("⚠️ 扫射未确认击杀，尝试 GUI 备用兜底点击...")
+                        self.log("⚠️ 轰炸未确认击杀，尝试原生兜底点击...")
                         try: sb.uc_gui_click_captcha()
                         except: pass
                         time.sleep(3)
