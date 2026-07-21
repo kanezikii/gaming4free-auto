@@ -47,7 +47,7 @@ class Game4FreeRenewal:
         time.sleep(random.uniform(min_s, max_s))
 
     def time_to_seconds(self, t_str):
-        """将 HH:MM:SS 格式转换为秒数，精准拦截 EXPIRED"""
+        """将 HH:MM:SS 格式转换为秒数，精准拦截 EXPIRED 等非数字状态"""
         if not t_str or "EXPIRED" in t_str.upper() or "未知" in t_str:
             return 0
         try:
@@ -183,20 +183,17 @@ class Game4FreeRenewal:
                     raise Exception(f"未找到打开模态框的按钮: {e}")
 
                 # ========================================================
-                # 💥 究极奥义：锚点定位 + 密集网格盲狙轰炸
+                # 💥 究极奥义：计算精确宽度的数学弹道扫射
                 # ========================================================
                 self.log("⏳ 正在挂机等待 42 秒，确保底层视频广告播放完毕...")
                 time.sleep(42)  
                 
-                self.log("🛡️ 发现 Shadow DOM (闭合影子节点)！启动【锚点定位打击】...")
+                self.log("🛡️ 发现 Shadow DOM (闭合影子节点)！启动【基于 iframe 宽度的数学弹道计算】...")
                 
-                # 清除可能遮挡的悬浮广告
-                try: sb.execute_script("document.querySelectorAll('ins, iframe[src*=\"google\"], .ad-container').forEach(e => e.remove());")
-                except: pass
-                
-                # 将所有高层级透明罩子无效化，防止它们吸收物理点击
+                # 清除可能遮挡的悬浮广告，并且干掉所有高层级隐形遮罩层
                 try:
                     sb.execute_script("""
+                        document.querySelectorAll('ins, iframe[src*=\"google\"], .ad-container').forEach(e => e.remove());
                         document.querySelectorAll('div').forEach(d => {
                             let z = window.getComputedStyle(d).zIndex;
                             if(z !== 'auto' && parseInt(z) > 100) {
@@ -212,37 +209,58 @@ class Game4FreeRenewal:
 
                 token = ""
                 for attempt in range(3):
-                    self.log(f"⚡ 装载弹药，释放网格盲狙轰炸 (尝试 {attempt+1}/3)...")
+                    self.log(f"⚡ 装载弹药，计算相对坐标并发动扫射 (尝试 {attempt+1}/3)...")
                     
                     try:
-                        # 1. 将 VOTE 按钮强行滚动到屏幕的绝对中间 (彻底修复 arguments 报错)
-                        sb.execute_script("document.querySelector('#vm-submit').scrollIntoView({block: 'center'});")
+                        # 1. 唯一且安全地锁定真实的 CF iframe，强制滚动到视野中央
+                        sb.execute_script("""
+                            document.querySelectorAll('iframe').forEach(f => {
+                                let s = (f.src || '').toLowerCase();
+                                if((s.includes('cloudflare') || s.includes('turnstile')) && f.offsetWidth > 0) {
+                                    f.id = 'target-cf-iframe';
+                                    f.scrollIntoView({block: 'center'});
+                                }
+                            });
+                        """)
                         time.sleep(1.5)
                         
-                        # 2. 找到完全处于可见 DOM 中的锚点：最终的 VOTE 按钮
-                        submit_btn = sb.find_element('#vm-submit')
-
-                        # 3. 以 VOTE 按钮中心为(0,0)，向左上方发起 4x4 密集扫射
-                        y_offsets = [-50, -65, -80, -95]    # 向上平移 (Y轴上移)
-                        x_offsets = [-90, -115, -140, -165] # 向左平移 (X轴左移)
-
-                        for y in y_offsets:
-                            for x in x_offsets:
-                                ActionChains(sb.driver).move_to_element(submit_btn).move_by_offset(x, y).click().perform()
-                                time.sleep(0.1)
-                                
+                        # 2. 拿到 iframe 在当前屏幕的绝对渲染宽度
+                        cf_width = sb.execute_script("return document.getElementById('target-cf-iframe') ? document.getElementById('target-cf-iframe').offsetWidth : 0;")
+                        
+                        if cf_width > 0:
+                            # 3. 获取最纯正的底层 WebElement 对象，彻底解决 arguments 报错
+                            cf_iframe = sb.driver.find_element("css selector", '#target-cf-iframe')
+                            
+                            # 4. 数学计算：ActionChains 默认锁定元素的中心点。
+                            # 要打中最左侧的复选框，我们需要向左平移 (宽度的一半) 并在向右收回 30 像素。
+                            base_offset = int(-(cf_width / 2) + 30)
+                            
+                            self.log(f"   -> 探测到 iframe 宽度为 {cf_width}px。计算得出复选框左向偏移为: {base_offset}px")
+                            
+                            # 以核心计算点为中心，展开极其密集的水平 5 点扫射
+                            offsets = [base_offset - 20, base_offset - 10, base_offset, base_offset + 10, base_offset + 20]
+                            
+                            for x_off in offsets:
+                                try:
+                                    ActionChains(sb.driver).move_to_element(cf_iframe).move_by_offset(x_off, 0).click().perform()
+                                    time.sleep(0.3)
+                                except Exception as e:
+                                    pass
+                        else:
+                            self.log("   -> 未在 DOM 中找到宽度大于 0 的 CF iframe，可能免检。")
+                            
                     except Exception as e:
-                        self.log(f"   -> 锚点定位或轰炸出现异常: {e}")
+                        self.log(f"   -> 弹道计算或开火出现异常: {e}")
                     
                     time.sleep(4)
                     
-                    # 摸底检查：读取隐藏在 Light DOM 里的加密表单数据
+                    # 摸底检查：唯一在 Light DOM 里暴露的隐蔽表单值
                     token = sb.execute_script("return document.querySelector('[name=\"cf-turnstile-response\"]') ? document.querySelector('[name=\"cf-turnstile-response\"]').value : ''")
                     if token:
-                        self.log("✅ 破盾成功！盲狙精准命中闭源框架内的打勾框！")
+                        self.log("✅ 破盾成功！数学弹道精准命中闭源框架内的打勾框！")
                         break
                     else:
-                        self.log("⚠️ 轰炸未确认击杀，尝试原生兜底点击...")
+                        self.log("⚠️ 扫射未确认击杀，尝试 GUI 备用兜底点击...")
                         try: sb.uc_gui_click_captcha()
                         except: pass
                         time.sleep(3)
@@ -269,6 +287,7 @@ class Game4FreeRenewal:
                 sec_before = self.time_to_seconds(timestamp_before)
                 sec_after = self.time_to_seconds(timestamp_after)
                 
+                # 核心拦截逻辑依然保持，防止谎报军情
                 if sec_after <= sec_before + 60:  
                     raise Exception(f"❌ 严重异常：时间未增加！(前: {timestamp_before}, 后: {timestamp_after})。验证码点击被拦截或未生效。")
 
