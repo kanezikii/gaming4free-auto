@@ -53,10 +53,20 @@ class Game4FreeRenewal:
         except:
             return 0
 
-    def send_telegram_notify(self, message, photo_path=None):
+    # 💡 核心修改：增加 6 小时通知周期逻辑，以及 force 强制发送参数
+    def send_telegram_notify(self, message, photo_path=None, force=False):
         if not TG_TOKEN or not TG_CHAT_ID:
             self.log("⚠️ 未配置 TG_TOKEN，跳过推送。")
             return
+            
+        # 获取当前的 UTC 小时时间
+        current_hour = time.gmtime().tm_hour
+        
+        # 如果不是强制发送（即常规成功通知），且当前小时不是 6 的倍数 (0, 6, 12, 18)，则拦截通知
+        if not force and current_hour % 6 != 0:
+            self.log(f"🔕 拦截通知: 当前时间(UTC {current_hour}点) 非 6 小时播报周期，已静默处理。")
+            return
+
         try:
             if photo_path and os.path.exists(photo_path):
                 url = f"https://api.telegram.org/bot{TG_TOKEN}/sendPhoto"
@@ -88,7 +98,6 @@ class Game4FreeRenewal:
         ) as sb:
             try:
                 self.log("✅ 浏览器已启动！")
-                # 🚫 已移除 sb.driver.maximize_window() 避免 Xvfb 协议崩溃
 
                 try:
                     proxies = {"http": PROXY_URL, "https": PROXY_URL} if PROXY_URL else None
@@ -218,6 +227,7 @@ class Game4FreeRenewal:
                 sb.save_screenshot(final_screenshot)
 
                 msg = f"✅ [{region}] 续期成功\n🖥️ 编号: {server_num}\n🕒 续期前时间: {timestamp_before}\n🎉 续期后时间: {timestamp_after}"
+                # 正常续期成功：走常规的 6 小时防打扰逻辑
                 self.send_telegram_notify(msg, final_screenshot)
 
             except Exception as e:
@@ -225,7 +235,8 @@ class Game4FreeRenewal:
                 error_shot = f"{self.screenshot_dir}/error_{server_num}.png"
                 try: sb.save_screenshot(error_shot)
                 except: pass
-                self.send_telegram_notify(f"❌ [{region}] 执行失败: {e}\n🖥️ 编号: {server_num}", error_shot)
+                # 💡 核心修改：遇到严重异常时，启用 force=True 无视时间规则强制报警
+                self.send_telegram_notify(f"❌ [{region}] 执行失败: {e}\n🖥️ 编号: {server_num}", error_shot, force=True)
 
     def run(self):
         if not SERVER_LIST:
