@@ -2,7 +2,7 @@ name: Gaming4free Auto Renew
 
 on:
   schedule:
-    - cron: '*/30 * * * *'  # 每 1 小时自动运行一次
+    - cron: '*/10 * * * *'  # 每 10分钟自动运行一次
   workflow_dispatch:       # 保持手动触发，方便随时测试
 
 permissions:
@@ -29,7 +29,6 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        # 增加 --no-cache-dir 强制拉取最新包，彻底解决 Chrome 130+ 协议断连 Bug
         pip install --upgrade --no-cache-dir seleniumbase undetected-chromedriver requests pyautogui
 
     - name: Setup Chrome
@@ -64,5 +63,4 @@ jobs:
         TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}  
         SERVERS: ${{ secrets.SERVERS }}  
       run: |
-        # 增加 xvfb 视窗分辨率以确保验证码位于视野内
         xvfb-run --server-args="-screen 0 1280x720x24" -a python gaming4free.py
