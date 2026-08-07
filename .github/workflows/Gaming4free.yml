@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  actions: write        # 新增：允许操作 Actions 运行记录的权限
 
 jobs:
   run_renewal:
@@ -64,3 +65,27 @@ jobs:
         SERVERS: ${{ secrets.SERVERS }}  
       run: |
         xvfb-run --server-args="-screen 0 1280x720x24" -a python gaming4free.py
+
+    - name: 🧽 清理进程和临时文件
+      if: always()
+      run: |
+        pkill -f xray || true
+        pkill -f chromedriver || true
+        pkill -f chrome || true
+        pkill -f Xvfb || true
+        rm -rf xray xray.log xray-linux-64.zip || true
+
+    - name: 🧹 清理旧的工作流运行记录
+      if: always()
+      env:
+        GH_TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
+      run: |
+        runs=$(gh run list --workflow="${{ github.workflow }}" --limit=100 --json databaseId --jq '.[].databaseId')
+        count=0
+        for run_id in $runs; do
+          count=$((count + 1))
+          if [ $count -gt 1 ]; then
+            echo "删除运行记录: $run_id"
+            gh run delete $run_id || true
+          fi
+        done
