@@ -3,7 +3,6 @@ import os
 import random
 import requests
 
-# 智能环境配置
 if "DISPLAY" not in os.environ:
     os.environ["DISPLAY"] = ":1"
     
@@ -53,7 +52,6 @@ class Game4FreeRenewal:
         except:
             return 0
 
-    # 💡 核心修改：增加 6 小时通知周期逻辑，以及 force 强制发送参数
     def send_telegram_notify(self, message, photo_path=None, force=False):
         if not TG_TOKEN or not TG_CHAT_ID:
             self.log("⚠️ 未配置 TG_TOKEN，跳过推送。")
